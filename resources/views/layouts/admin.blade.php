@@ -4,7 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Admin - @yield('title', 'Dashboard') | TennisApp</title>
+    <title>Admin - @yield('title', 'Dashboard') | Tennis Challenge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
         [x-cloak] { display: none !important; }
@@ -33,11 +36,11 @@
         {{-- Sidebar --}}
         <aside :class="sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-0 lg:w-20 lg:translate-x-0'"
                class="fixed lg:sticky top-0 h-screen bg-white border-r border-gray-200 z-40 transition-all duration-300 overflow-hidden flex flex-col">
-            <div class="p-4 border-b border-gray-100 flex items-center gap-3">
-                <div class="w-9 h-9 bg-[#0071E3] rounded-xl flex items-center justify-center flex-shrink-0">
+            <div class="p-4 border-b border-gray-100 flex items-center">
+                <img x-show="sidebarOpen" x-cloak src="{{ asset('images/image-removebg-preview.png') }}" alt="Tennis Challenge" class="h-9">
+                <div x-show="!sidebarOpen" class="w-9 h-9 bg-tc-primary rounded-xl flex items-center justify-center flex-shrink-0">
                     <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>
                 </div>
-                <span x-show="sidebarOpen" x-cloak class="text-lg font-bold whitespace-nowrap">TennisApp</span>
             </div>
             <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
                 @php
@@ -51,11 +54,12 @@
                     ['route' => 'admin.redemptions.index', 'label' => 'Canjes', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>'],
                     ['route' => 'admin.banners.index', 'label' => 'Banners', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>'],
                     ['route' => 'admin.settings.index', 'label' => 'Configuración', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>'],
+                    ['route' => 'admin.api-sync.index', 'label' => 'API Sync', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>'],
                 ];
                 @endphp
                 @foreach($adminLinks as $link)
                     <a href="{{ route($link['route']) }}"
-                       class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {{ request()->routeIs($link['route'].'*') ? 'bg-[#0071E3] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}">
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all {{ request()->routeIs($link['route'].'*') ? 'bg-tc-primary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' }}">
                         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">{!! $link['icon'] !!}</svg>
                         <span x-show="sidebarOpen" x-cloak class="whitespace-nowrap">{{ $link['label'] }}</span>
                     </a>

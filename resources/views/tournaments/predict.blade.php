@@ -4,7 +4,7 @@
 @section('content')
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
     <div class="mb-8">
-        <a href="{{ route('tournaments.show', $tournament) }}" class="text-[#0071E3] text-sm font-medium hover:underline">&larr; Volver al torneo</a>
+        <a href="{{ route('tournaments.show', $tournament) }}" class="text-tc-primary text-sm font-medium hover:underline">&larr; Volver al torneo</a>
         <h1 class="text-3xl font-bold mt-3 mb-2">Hacer pronósticos</h1>
         <p class="text-gray-500">{{ $tournament->name }} &middot; Selecciona al ganador de cada partido</p>
     </div>
@@ -25,10 +25,10 @@
                     <input type="hidden" name="match_id" value="{{ $match->id }}">
                     <input type="hidden" name="predicted_winner_id" value="{{ $match->player1_id }}">
                     <button type="submit"
-                            class="w-full p-4 rounded-2xl border-2 transition-all text-center hover:border-[#0071E3] hover:bg-blue-50 border-gray-200 group"
+                            class="w-full p-4 rounded-2xl border-2 transition-all text-center hover:border-tc-primary hover:bg-blue-50 border-gray-200 group"
                             @click="selected = {{ $match->player1_id }}">
-                        <div class="w-14 h-14 bg-[#0071E3]/10 rounded-full flex items-center justify-center mx-auto mb-3 text-lg font-bold text-[#0071E3] group-hover:bg-[#0071E3] group-hover:text-white transition-all">
-                            {{ strtoupper(substr($match->player1->nationality_code, 0, 3)) }}
+                        <div class="w-14 h-14 rounded-full overflow-hidden mx-auto mb-3 ring-2 ring-tc-primary/20 group-hover:ring-tc-primary transition-all">
+                            <img src="{{ $match->player1->flag_url }}" alt="{{ $match->player1->nationality_code }}" class="w-full h-full object-cover">
                         </div>
                         <div class="font-semibold text-sm">{{ $match->player1->name }}</div>
                         <div class="text-xs text-gray-400 mt-1">#{{ $match->player1->ranking }} &middot; {{ $match->player1->country }}</div>
@@ -42,8 +42,8 @@
                     <input type="hidden" name="predicted_winner_id" value="{{ $match->player2_id }}">
                     <button type="submit"
                             class="w-full p-4 rounded-2xl border-2 transition-all text-center hover:border-green-500 hover:bg-green-50 border-gray-200 group">
-                        <div class="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-3 text-lg font-bold text-green-600 group-hover:bg-green-500 group-hover:text-white transition-all">
-                            {{ strtoupper(substr($match->player2->nationality_code, 0, 3)) }}
+                        <div class="w-14 h-14 rounded-full overflow-hidden mx-auto mb-3 ring-2 ring-green-200 group-hover:ring-green-500 transition-all">
+                            <img src="{{ $match->player2->flag_url }}" alt="{{ $match->player2->nationality_code }}" class="w-full h-full object-cover">
                         </div>
                         <div class="font-semibold text-sm">{{ $match->player2->name }}</div>
                         <div class="text-xs text-gray-400 mt-1">#{{ $match->player2->ranking }} &middot; {{ $match->player2->country }}</div>

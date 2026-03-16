@@ -4,7 +4,7 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h2 class="text-xl font-bold">Gestión de Jugadores</h2>
-    <a href="{{ route('admin.players.create') }}" class="px-5 py-2.5 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0062CC] transition-colors">
+    <a href="{{ route('admin.players.create') }}" class="px-5 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-medium hover:bg-tc-primary-hover transition-colors">
         + Nuevo jugador
     </a>
 </div>
@@ -15,13 +15,13 @@
         <form action="{{ route('admin.players.index') }}" method="GET" class="flex-1 w-full sm:w-auto">
             <div class="relative">
                 <svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                <input type="text" name="search" value="{{ request('search') }}" placeholder="Buscar jugador..." class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <input type="text" name="search" value="{{ request('search') }}" placeholder="Buscar jugador..." class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
             </div>
         </form>
         <div class="flex items-center gap-2">
-            <a href="{{ route('admin.players.index') }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ !request('category') ? 'bg-[#0071E3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Todos</a>
-            <a href="{{ route('admin.players.index', ['category' => 'ATP']) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('category') === 'ATP' ? 'bg-[#0071E3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">ATP</a>
-            <a href="{{ route('admin.players.index', ['category' => 'WTA']) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('category') === 'WTA' ? 'bg-[#0071E3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">WTA</a>
+            <a href="{{ route('admin.players.index') }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ !request('category') ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Todos</a>
+            <a href="{{ route('admin.players.index', ['category' => 'ATP']) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('category') === 'ATP' ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">ATP</a>
+            <a href="{{ route('admin.players.index', ['category' => 'WTA']) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('category') === 'WTA' ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">WTA</a>
         </div>
     </div>
 </div>

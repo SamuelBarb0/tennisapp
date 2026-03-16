@@ -6,6 +6,7 @@ use App\Http\Controllers\PredictionController;
 use App\Http\Controllers\RankingController;
 use App\Http\Controllers\PrizeController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RulesController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\TournamentController as AdminTournamentController;
 use App\Http\Controllers\Admin\PlayerController as AdminPlayerController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Admin\PrizeController as AdminPrizeController;
 use App\Http\Controllers\Admin\RedemptionController as AdminRedemptionController;
 use App\Http\Controllers\Admin\BannerController as AdminBannerController;
 use App\Http\Controllers\Admin\SettingController as AdminSettingController;
+use App\Http\Controllers\Admin\ApiSyncController;
 use Illuminate\Support\Facades\Route;
 
 // Public routes
@@ -23,6 +25,7 @@ Route::get('/tournaments', [TournamentController::class, 'index'])->name('tourna
 Route::get('/tournaments/{tournament:slug}', [TournamentController::class, 'show'])->name('tournaments.show');
 Route::get('/rankings', [RankingController::class, 'index'])->name('rankings.index');
 Route::get('/prizes', [PrizeController::class, 'index'])->name('prizes.index');
+Route::get('/rules', [RulesController::class, 'index'])->name('rules');
 
 // Authenticated routes
 Route::middleware('auth')->group(function () {
@@ -49,8 +52,17 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('redemptions', [AdminRedemptionController::class, 'index'])->name('redemptions.index');
     Route::patch('redemptions/{redemption}', [AdminRedemptionController::class, 'updateStatus'])->name('redemptions.update');
     Route::resource('banners', AdminBannerController::class)->except('show');
+    Route::patch('banners/{banner}/toggle', [AdminBannerController::class, 'toggle'])->name('banners.toggle');
     Route::get('settings', [AdminSettingController::class, 'index'])->name('settings.index');
     Route::post('settings', [AdminSettingController::class, 'update'])->name('settings.update');
+
+    // API Sync
+    Route::get('api-sync', [ApiSyncController::class, 'index'])->name('api-sync.index');
+    Route::post('api-sync/tournaments', [ApiSyncController::class, 'syncTournaments'])->name('api-sync.tournaments');
+    Route::post('api-sync/players', [ApiSyncController::class, 'syncPlayers'])->name('api-sync.players');
+    Route::post('api-sync/fixtures', [ApiSyncController::class, 'syncFixtures'])->name('api-sync.fixtures');
+    Route::post('api-sync/livescores', [ApiSyncController::class, 'syncLivescores'])->name('api-sync.livescores');
+    Route::post('api-sync/all', [ApiSyncController::class, 'syncAll'])->name('api-sync.all');
 });
 
 require __DIR__.'/auth.php';

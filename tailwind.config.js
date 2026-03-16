@@ -17,7 +17,23 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                sans: ['Helvetica Neue', 'Helvetica', 'Arial', ...defaultTheme.fontFamily.sans],
+                mono: ['Roboto Mono', ...defaultTheme.fontFamily.mono],
+            },
+            colors: {
+                'tc': {
+                    'primary': '#1b3d5d',
+                    'primary-hover': '#142d45',
+                    'primary-dark': '#0e1f30',
+                    'accent': '#eee539',
+                    'gray-light': '#d8e3e5',
+                    'gray': '#c5c5c5',
+                    'gray-dark': '#413c42',
+                    'australian': '#2980de',
+                    'wimbledon': '#6b37b6',
+                    'roland': '#c05c34',
+                    'usopen': '#0a79c3',
+                },
             },
         },
     },

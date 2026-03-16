@@ -13,7 +13,7 @@
         @method('PUT')
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">Torneo</label>
-            <select name="tournament_id" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+            <select name="tournament_id" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                 <option value="">Seleccionar torneo...</option>
                 @foreach($tournaments as $tournament)
                     <option value="{{ $tournament->id }}" {{ old('tournament_id', $match->tournament_id) == $tournament->id ? 'selected' : '' }}>{{ $tournament->name }}</option>
@@ -24,7 +24,7 @@
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Jugador 1</label>
-                <select name="player1_id" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <select name="player1_id" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                     <option value="">Seleccionar jugador...</option>
                     <optgroup label="ATP">
                         @foreach($players->where('category', 'ATP') as $player)
@@ -41,7 +41,7 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Jugador 2</label>
-                <select name="player2_id" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <select name="player2_id" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                     <option value="">Seleccionar jugador...</option>
                     <optgroup label="ATP">
                         @foreach($players->where('category', 'ATP') as $player)
@@ -60,7 +60,7 @@
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Ronda</label>
-                <select name="round" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <select name="round" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                     <option value="R128" {{ old('round', $match->round) === 'R128' ? 'selected' : '' }}>R128</option>
                     <option value="R64" {{ old('round', $match->round) === 'R64' ? 'selected' : '' }}>R64</option>
                     <option value="R32" {{ old('round', $match->round) === 'R32' ? 'selected' : '' }}>R32</option>
@@ -73,7 +73,7 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Fecha y hora</label>
-                <input type="datetime-local" name="scheduled_at" value="{{ old('scheduled_at', $match->scheduled_at ? $match->scheduled_at->format('Y-m-d\TH:i') : '') }}" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <input type="datetime-local" name="scheduled_at" value="{{ old('scheduled_at', $match->scheduled_at ? $match->scheduled_at->format('Y-m-d\TH:i') : '') }}" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                 @error('scheduled_at') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
         </div>
@@ -84,12 +84,12 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1.5">Score</label>
-                    <input type="text" name="score" value="{{ old('score', $match->score) }}" placeholder="6-4, 3-6, 7-5" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                    <input type="text" name="score" value="{{ old('score', $match->score) }}" placeholder="6-4, 3-6, 7-5" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                     @error('score') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1.5">Estado</label>
-                    <select name="status" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                    <select name="status" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                         <option value="pending" {{ old('status', $match->status) === 'pending' ? 'selected' : '' }}>Pendiente</option>
                         <option value="live" {{ old('status', $match->status) === 'live' ? 'selected' : '' }}>En vivo</option>
                         <option value="finished" {{ old('status', $match->status) === 'finished' ? 'selected' : '' }}>Finalizado</option>
@@ -99,7 +99,7 @@
             </div>
             <div class="mt-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Ganador</label>
-                <select name="winner_id" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <select name="winner_id" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                     <option value="">Sin definir</option>
                     @if($match->player1)
                         <option value="{{ $match->player1_id }}" {{ old('winner_id', $match->winner_id) == $match->player1_id ? 'selected' : '' }}>{{ $match->player1->name }}</option>
@@ -113,7 +113,7 @@
         </div>
 
         <div class="flex items-center gap-3 pt-2">
-            <button type="submit" class="px-6 py-2.5 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0062CC] transition-colors">Actualizar partido</button>
+            <button type="submit" class="px-6 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-medium hover:bg-tc-primary-hover transition-colors">Actualizar partido</button>
             <a href="{{ route('admin.matches.index') }}" class="px-6 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">Cancelar</a>
         </div>
     </form>

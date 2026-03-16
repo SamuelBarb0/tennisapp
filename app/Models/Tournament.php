@@ -13,6 +13,7 @@ class Tournament extends Model
     protected $fillable = [
         'name', 'slug', 'type', 'location', 'city', 'country', 'surface',
         'start_date', 'end_date', 'is_premium', 'is_active', 'image', 'points_multiplier',
+        'api_tournament_key', 'api_event_type_key', 'season',
     ];
 
     protected function casts(): array
@@ -38,6 +39,17 @@ class Tournament extends Model
     public function matches()
     {
         return $this->hasMany(TennisMatch::class);
+    }
+
+    public function roundPoints()
+    {
+        return $this->hasMany(TournamentRoundPoints::class);
+    }
+
+    public function getPointsForRound(string $round): int
+    {
+        $rp = $this->roundPoints()->where('round', $round)->first();
+        return $rp ? $rp->points : (int) Setting::get('points_per_correct', 10);
     }
 
     public function getStatusAttribute(): string

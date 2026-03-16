@@ -4,7 +4,7 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h2 class="text-xl font-bold">Gestión de Partidos</h2>
-    <a href="{{ route('admin.matches.create') }}" class="px-5 py-2.5 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0062CC] transition-colors">
+    <a href="{{ route('admin.matches.create') }}" class="px-5 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-medium hover:bg-tc-primary-hover transition-colors">
         + Nuevo partido
     </a>
 </div>
@@ -13,7 +13,7 @@
 <div class="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm mb-6">
     <form action="{{ route('admin.matches.index') }}" method="GET" class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <div class="flex-1 w-full sm:w-auto">
-            <select name="tournament_id" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+            <select name="tournament_id" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                 <option value="">Todos los torneos</option>
                 @foreach($tournaments as $tournament)
                     <option value="{{ $tournament->id }}" {{ request('tournament_id') == $tournament->id ? 'selected' : '' }}>{{ $tournament->name }}</option>
@@ -21,10 +21,10 @@
             </select>
         </div>
         <div class="flex items-center gap-2">
-            <a href="{{ route('admin.matches.index') }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ !request('status') ? 'bg-[#0071E3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Todos</a>
-            <a href="{{ route('admin.matches.index', array_merge(request()->query(), ['status' => 'pending'])) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('status') === 'pending' ? 'bg-[#0071E3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Pendientes</a>
-            <a href="{{ route('admin.matches.index', array_merge(request()->query(), ['status' => 'live'])) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('status') === 'live' ? 'bg-[#0071E3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">En vivo</a>
-            <a href="{{ route('admin.matches.index', array_merge(request()->query(), ['status' => 'finished'])) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('status') === 'finished' ? 'bg-[#0071E3] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Finalizados</a>
+            <a href="{{ route('admin.matches.index') }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ !request('status') ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Todos</a>
+            <a href="{{ route('admin.matches.index', array_merge(request()->query(), ['status' => 'pending'])) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('status') === 'pending' ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Pendientes</a>
+            <a href="{{ route('admin.matches.index', array_merge(request()->query(), ['status' => 'live'])) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('status') === 'live' ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">En vivo</a>
+            <a href="{{ route('admin.matches.index', array_merge(request()->query(), ['status' => 'finished'])) }}" class="px-4 py-2 text-sm rounded-xl font-medium {{ request('status') === 'finished' ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }} transition-colors">Finalizados</a>
         </div>
         <button type="submit" class="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">Filtrar</button>
     </form>

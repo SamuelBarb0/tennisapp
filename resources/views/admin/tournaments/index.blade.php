@@ -4,7 +4,7 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h2 class="text-xl font-bold">Gestión de Torneos</h2>
-    <a href="{{ route('admin.tournaments.create') }}" class="px-5 py-2.5 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0062CC] transition-colors">
+    <a href="{{ route('admin.tournaments.create') }}" class="px-5 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-medium hover:bg-tc-primary-hover transition-colors">
         + Nuevo torneo
     </a>
 </div>

@@ -42,7 +42,7 @@
                               x-data="{ confirming: false }">
                             @csrf
                             <button type="button" x-show="!confirming" @click="confirming = true"
-                                    class="w-full py-2.5 bg-[#0071E3] text-white rounded-2xl text-sm font-medium hover:bg-[#0062CC] transition-all">
+                                    class="w-full py-2.5 bg-tc-primary text-white rounded-2xl text-sm font-medium hover:bg-tc-primary-hover transition-all">
                                 Canjear
                             </button>
                             <div x-show="confirming" x-cloak class="flex gap-2">

@@ -25,6 +25,10 @@ class PredictionController extends Controller
             ['predicted_winner_id' => $request->predicted_winner_id]
         );
 
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Pronóstico guardado exitosamente.']);
+        }
+
         return back()->with('success', 'Pronóstico guardado exitosamente.');
     }
 }

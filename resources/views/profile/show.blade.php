@@ -6,7 +6,7 @@
     {{-- Profile Header --}}
     <div class="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 mb-8 fade-in">
         <div class="flex flex-col sm:flex-row items-center gap-6">
-            <div class="w-20 h-20 bg-[#0071E3] rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-blue-500/25">
+            <div class="w-20 h-20 bg-tc-primary rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-blue-500/25">
                 {{ strtoupper(substr($user->name, 0, 1)) }}
             </div>
             <div class="text-center sm:text-left flex-1">
@@ -26,7 +26,7 @@
                 <div class="text-xs text-yellow-600/70 mt-1">Puntos</div>
             </div>
             <div class="text-center p-4 bg-blue-50 rounded-2xl">
-                <div class="text-2xl font-bold text-[#0071E3]">{{ $totalPredictions }}</div>
+                <div class="text-2xl font-bold text-tc-primary">{{ $totalPredictions }}</div>
                 <div class="text-xs text-blue-600/70 mt-1">Pronósticos</div>
             </div>
             <div class="text-center p-4 bg-green-50 rounded-2xl">

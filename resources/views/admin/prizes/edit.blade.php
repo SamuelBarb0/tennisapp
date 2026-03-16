@@ -13,29 +13,29 @@
         @method('PUT')
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">Nombre</label>
-            <input type="text" name="name" value="{{ old('name', $prize->name) }}" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none transition-all">
+            <input type="text" name="name" value="{{ old('name', $prize->name) }}" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none transition-all">
             @error('name') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">Descripción</label>
-            <textarea name="description" rows="4" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none resize-none">{{ old('description', $prize->description) }}</textarea>
+            <textarea name="description" rows="4" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none resize-none">{{ old('description', $prize->description) }}</textarea>
             @error('description') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
         </div>
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Puntos requeridos</label>
-                <input type="number" name="points_required" value="{{ old('points_required', $prize->points_required) }}" min="1" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <input type="number" name="points_required" value="{{ old('points_required', $prize->points_required) }}" min="1" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                 @error('points_required') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Stock</label>
-                <input type="number" name="stock" value="{{ old('stock', $prize->stock) }}" min="0" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none">
+                <input type="number" name="stock" value="{{ old('stock', $prize->stock) }}" min="0" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                 @error('stock') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
         </div>
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">Imagen</label>
-            <input type="file" name="image" accept="image/*" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-[#0071E3] file:text-white">
+            <input type="file" name="image" accept="image/*" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-tc-primary file:text-white">
             @if($prize->image)
                 <div class="mt-2 flex items-center gap-2">
                     <img src="{{ asset('storage/' . $prize->image) }}" alt="{{ $prize->name }}" class="w-16 h-16 rounded-xl object-cover">
@@ -46,12 +46,12 @@
         </div>
         <div>
             <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" name="is_active" value="1" {{ old('is_active', $prize->is_active) ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-[#0071E3] focus:ring-[#0071E3]">
+                <input type="checkbox" name="is_active" value="1" {{ old('is_active', $prize->is_active) ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary">
                 <span class="text-sm">Activo</span>
             </label>
         </div>
         <div class="flex items-center gap-3 pt-2">
-            <button type="submit" class="px-6 py-2.5 bg-[#0071E3] text-white rounded-xl text-sm font-medium hover:bg-[#0062CC] transition-colors">Actualizar premio</button>
+            <button type="submit" class="px-6 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-medium hover:bg-tc-primary-hover transition-colors">Actualizar premio</button>
             <a href="{{ route('admin.prizes.index') }}" class="px-6 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">Cancelar</a>
         </div>
     </form>

@@ -28,7 +28,7 @@
                 <tr class="hover:bg-gray-50 transition-colors">
                     <td class="px-6 py-4">
                         <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 bg-[#0071E3] rounded-full flex items-center justify-center text-white text-sm font-bold">{{ strtoupper(substr($redemption->user->name ?? '?', 0, 1)) }}</div>
+                            <div class="w-9 h-9 bg-tc-primary rounded-full flex items-center justify-center text-white text-sm font-bold">{{ strtoupper(substr($redemption->user->name ?? '?', 0, 1)) }}</div>
                             <div>
                                 <div class="font-medium text-sm">{{ $redemption->user->name ?? '-' }}</div>
                                 <div class="text-xs text-gray-400">{{ $redemption->user->email ?? '' }}</div>
@@ -40,7 +40,7 @@
                     <td class="px-6 py-4">
                         <form action="{{ route('admin.redemptions.update', $redemption) }}" method="POST" class="inline" x-data>
                             @csrf @method('PATCH')
-                            <select name="status" onchange="this.form.submit()" class="px-3 py-1.5 text-xs font-medium rounded-xl border-0 cursor-pointer focus:ring-2 focus:ring-[#0071E3]
+                            <select name="status" onchange="this.form.submit()" class="px-3 py-1.5 text-xs font-medium rounded-xl border-0 cursor-pointer focus:ring-2 focus:ring-tc-primary
                                 {{ $redemption->status === 'completed' ? 'bg-green-100 text-green-600' : ($redemption->status === 'pending' ? 'bg-yellow-100 text-yellow-600' : ($redemption->status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500')) }}">
                                 <option value="pending" {{ $redemption->status === 'pending' ? 'selected' : '' }}>Pendiente</option>
                                 <option value="completed" {{ $redemption->status === 'completed' ? 'selected' : '' }}>Completado</option>
@@ -57,8 +57,8 @@
                             </template>
                             <template x-if="editing">
                                 <div class="flex items-center gap-2">
-                                    <input type="text" name="admin_notes" value="{{ $redemption->admin_notes }}" class="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#0071E3] focus:border-transparent outline-none" placeholder="Nota...">
-                                    <button type="submit" class="px-2 py-1.5 text-xs font-medium text-[#0071E3] bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">Guardar</button>
+                                    <input type="text" name="admin_notes" value="{{ $redemption->admin_notes }}" class="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none" placeholder="Nota...">
+                                    <button type="submit" class="px-2 py-1.5 text-xs font-medium text-tc-primary bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">Guardar</button>
                                 </div>
                             </template>
                         </form>

@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'api_tennis' => [
+        'key' => env('API_TENNIS_KEY'),
+        'base_url' => env('API_TENNIS_URL', 'https://api.api-tennis.com/tennis/'),
+    ],
+
 ];

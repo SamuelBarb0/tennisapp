@@ -10,7 +10,7 @@
 {{-- User Profile Card --}}
 <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm mb-6">
     <div class="flex items-start gap-5">
-        <div class="w-16 h-16 bg-[#0071E3] rounded-2xl flex items-center justify-center text-white text-2xl font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</div>
+        <div class="w-16 h-16 bg-tc-primary rounded-2xl flex items-center justify-center text-white text-2xl font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</div>
         <div class="flex-1">
             <div class="flex items-center gap-3 mb-1">
                 <h3 class="text-lg font-bold">{{ $user->name }}</h3>
@@ -34,7 +34,7 @@
     {{-- Stats --}}
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
         <div class="bg-gray-50 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-[#0071E3]">{{ number_format($user->points ?? 0) }}</div>
+            <div class="text-2xl font-bold text-tc-primary">{{ number_format($user->points ?? 0) }}</div>
             <div class="text-xs text-gray-500 mt-1">Puntos</div>
         </div>
         <div class="bg-gray-50 rounded-xl p-4 text-center">

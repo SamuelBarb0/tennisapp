@@ -10,9 +10,9 @@ class SettingSeeder extends Seeder
     public function run(): void
     {
         $settings = [
-            'site_name' => 'TennisApp',
+            'site_name' => 'Tennis Challenge',
             'site_description' => 'La mejor plataforma de pronósticos de tenis profesional',
-            'primary_color' => '#0071E3',
+            'primary_color' => '#1b3d5d',
             'secondary_color' => '#34C759',
             'contact_email' => 'contacto@tennisapp.com',
             'instagram' => 'https://instagram.com/tennisapp',

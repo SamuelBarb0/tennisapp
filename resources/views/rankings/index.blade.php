@@ -65,7 +65,7 @@
                     <span class="text-sm font-medium text-gray-400">{{ $rank }}</span>
                 @endif
             </div>
-            <div class="w-10 h-10 bg-[#0071E3] rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+            <div class="w-10 h-10 bg-tc-primary rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                 {{ strtoupper(substr($user->name, 0, 1)) }}
             </div>
             <div class="flex-1 min-w-0">
@@ -73,7 +73,7 @@
                 <div class="text-xs text-gray-400">{{ $user->predictions()->count() }} pronósticos</div>
             </div>
             <div class="text-right">
-                <div class="font-bold text-[#0071E3]">{{ number_format($user->points) }}</div>
+                <div class="font-bold text-tc-primary">{{ number_format($user->points) }}</div>
                 <div class="text-xs text-gray-400">puntos</div>
             </div>
         </div>

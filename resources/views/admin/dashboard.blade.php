@@ -33,12 +33,12 @@
     <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
         <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold">Usuarios recientes</h3>
-            <a href="{{ route('admin.users.index') }}" class="text-sm text-[#0071E3] hover:underline">Ver todos</a>
+            <a href="{{ route('admin.users.index') }}" class="text-sm text-tc-primary hover:underline">Ver todos</a>
         </div>
         <div class="space-y-3">
             @foreach($recentUsers as $user)
             <div class="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 transition-colors">
-                <div class="w-9 h-9 bg-[#0071E3] rounded-full flex items-center justify-center text-white text-sm font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</div>
+                <div class="w-9 h-9 bg-tc-primary rounded-full flex items-center justify-center text-white text-sm font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</div>
                 <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium truncate">{{ $user->name }}</div>
                     <div class="text-xs text-gray-400">{{ $user->email }}</div>
