@@ -3,111 +3,99 @@
 namespace App\Services\Sync;
 
 use App\Models\Tournament;
-use App\Services\ApiTennisService;
+use App\Services\SportradarService;
+use App\Services\Sportradar\TournamentRegistry;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
 class TournamentSync
 {
-    // Event type keys for singles (main categories)
-    const ATP_SINGLES = 265;
-    const WTA_SINGLES = 266;
+    protected SportradarService $api;
 
-    // Grand Slam tournament names
-    const GRAND_SLAMS = [
-        'Australian Open',
-        'Roland Garros',
-        'Wimbledon',
-        'US Open',
-    ];
-
-    protected ApiTennisService $api;
-
-    public function __construct(ApiTennisService $api)
+    public function __construct(SportradarService $api)
     {
         $this->api = $api;
     }
 
     public function sync(): array
     {
-        $tournaments = $this->api->getTournaments();
-
-        if ($tournaments === null) {
-            return ['error' => 'No se pudo conectar con la API'];
-        }
-
         $created = 0;
         $updated = 0;
-        $skipped = 0;
+        $errors = 0;
 
-        // Filter only ATP Singles and WTA Singles tournaments
-        $relevantTypes = [self::ATP_SINGLES, self::WTA_SINGLES];
+        foreach (TournamentRegistry::TARGETS as $competitionId => $info) {
+            try {
+                $seasons = $this->api->getSeasons($competitionId);
 
-        foreach ($tournaments as $t) {
-            $eventTypeKey = (int) $t['event_type_key'];
+                if (!$seasons || empty($seasons)) {
+                    Log::warning("No seasons found for {$info['name']}", ['competition_id' => $competitionId]);
+                    $errors++;
+                    continue;
+                }
 
-            if (!in_array($eventTypeKey, $relevantTypes)) {
-                $skipped++;
-                continue;
-            }
+                // Find the 2026 season, or the most recent one
+                $season = $this->findCurrentSeason($seasons);
 
-            $type = $this->resolveType($t['tournament_name'], $eventTypeKey);
-            $surface = $this->normalizeSurface($t['tournament_sourface'] ?? null);
+                if (!$season) {
+                    Log::warning("No current season for {$info['name']}");
+                    $errors++;
+                    continue;
+                }
 
-            $tournament = Tournament::where('api_tournament_key', $t['tournament_key'])->first();
+                // Build name: strip existing prefix, then add gender suffix
+                $baseName = preg_replace('/^(ATP|WTA)\s+/', '', $info['name']);
+                $genderLabel = $info['gender'] === 'women' ? 'Femenino' : 'Masculino';
+                $fullName = "{$baseName} {$genderLabel}";
 
-            // Prefix with category to avoid duplicate slugs (e.g., ATP Acapulco vs WTA Acapulco)
-            $prefix = $eventTypeKey === self::WTA_SINGLES ? 'WTA' : 'ATP';
-            $fullName = "{$prefix} {$t['tournament_name']}";
+                $tournament = Tournament::where('api_tournament_key', $competitionId)->first();
 
-            $data = [
-                'name' => $fullName,
-                'slug' => Str::slug($fullName),
-                'type' => $type,
-                'surface' => $surface,
-                'api_event_type_key' => $eventTypeKey,
-                'is_active' => true,
-            ];
+                $data = [
+                    'name' => $fullName,
+                    'slug' => Str::slug($fullName . '-' . $info['gender']),
+                    'type' => $info['type'],
+                    'surface' => $info['surface'],
+                    'city' => $info['city'],
+                    'country' => $info['country'],
+                    'location' => $info['city'] . ', ' . $info['country'],
+                    'start_date' => $season['start_date'],
+                    'end_date' => $season['end_date'],
+                    'is_active' => true,
+                    'api_event_type_key' => $season['id'], // Store season ID here
+                ];
 
-            if ($tournament) {
-                $tournament->update($data);
-                $updated++;
-            } else {
-                $data['api_tournament_key'] = $t['tournament_key'];
-                $data['start_date'] = now();
-                $data['end_date'] = now()->addDays(7);
-                $data['points_multiplier'] = $type === 'GrandSlam' ? 2.0 : 1.0;
-                Tournament::create($data);
-                $created++;
+                if ($tournament) {
+                    $tournament->update($data);
+                    $updated++;
+                } else {
+                    $data['api_tournament_key'] = $competitionId;
+                    $data['is_premium'] = false;
+                    Tournament::create($data);
+                    $created++;
+                }
+            } catch (\Exception $e) {
+                Log::error("Error syncing tournament {$info['name']}: {$e->getMessage()}");
+                $errors++;
             }
         }
 
-        Log::info("Tournament sync completed", compact('created', 'updated', 'skipped'));
-
-        return compact('created', 'updated', 'skipped');
+        Log::info("Tournament sync completed", compact('created', 'updated', 'errors'));
+        return compact('created', 'updated', 'errors');
     }
 
-    protected function resolveType(string $name, int $eventTypeKey): string
+    protected function findCurrentSeason(array $seasons): ?array
     {
-        foreach (self::GRAND_SLAMS as $gs) {
-            if (stripos($name, $gs) !== false) {
-                return 'GrandSlam';
+        $currentYear = (int) date('Y');
+
+        // Prefer current year
+        foreach ($seasons as $season) {
+            $year = (int) ($season['year'] ?? 0);
+            if ($year === $currentYear) {
+                return $season;
             }
         }
 
-        return $eventTypeKey === self::WTA_SINGLES ? 'WTA' : 'ATP';
-    }
-
-    protected function normalizeSurface(?string $surface): ?string
-    {
-        if (!$surface) return null;
-
-        $surface = strtolower($surface);
-        if (str_contains($surface, 'hard')) return 'Hard';
-        if (str_contains($surface, 'clay')) return 'Clay';
-        if (str_contains($surface, 'grass')) return 'Grass';
-        if (str_contains($surface, 'carpet')) return 'Carpet';
-
-        return ucfirst($surface);
+        // Fallback to most recent
+        usort($seasons, fn($a, $b) => ($b['year'] ?? 0) <=> ($a['year'] ?? 0));
+        return $seasons[0] ?? null;
     }
 }

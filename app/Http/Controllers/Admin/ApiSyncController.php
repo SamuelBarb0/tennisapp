@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
-use App\Services\ApiTennisService;
+use App\Services\SportradarService;
 use App\Services\Sync\TournamentSync;
 use App\Services\Sync\PlayerSync;
 use App\Services\Sync\MatchSync;
@@ -26,7 +26,7 @@ class ApiSyncController extends Controller
 
     public function syncTournaments()
     {
-        $sync = new TournamentSync(app(ApiTennisService::class));
+        $sync = new TournamentSync(app(SportradarService::class));
         $result = $sync->sync();
 
         if (isset($result['error'])) {
@@ -35,13 +35,17 @@ class ApiSyncController extends Controller
 
         Setting::set('last_sync_tournaments', now()->toDateTimeString());
 
-        return back()->with('success', "Torneos sincronizados: {$result['created']} creados, {$result['updated']} actualizados, {$result['skipped']} omitidos.");
+        return back()->with('success', "Torneos sincronizados: {$result['created']} creados, {$result['updated']} actualizados.");
     }
 
     public function syncPlayers()
     {
-        $sync = new PlayerSync(app(ApiTennisService::class));
+        $sync = new PlayerSync(app(SportradarService::class));
         $result = $sync->sync('all');
+
+        if (isset($result['error'])) {
+            return back()->with('error', $result['error']);
+        }
 
         Setting::set('last_sync_players', now()->toDateTimeString());
 
@@ -50,11 +54,8 @@ class ApiSyncController extends Controller
 
     public function syncFixtures(Request $request)
     {
-        $from = $request->input('date_from', now()->format('Y-m-d'));
-        $to = $request->input('date_to', now()->addDays(7)->format('Y-m-d'));
-
-        $sync = new MatchSync(app(ApiTennisService::class));
-        $result = $sync->syncFixtures($from, $to);
+        $sync = new MatchSync(app(SportradarService::class));
+        $result = $sync->syncAll();
 
         if (isset($result['error'])) {
             return back()->with('error', $result['error']);
@@ -62,13 +63,13 @@ class ApiSyncController extends Controller
 
         Setting::set('last_sync_fixtures', now()->toDateTimeString());
 
-        return back()->with('success', "Partidos sincronizados: {$result['created']} creados, {$result['updated']} actualizados, {$result['skipped']} omitidos. Predicciones evaluadas: {$result['predictionsScored']}.");
+        return back()->with('success', "Partidos sincronizados: {$result['created']} creados, {$result['updated']} actualizados, {$result['skipped']} omitidos. Predicciones: {$result['predictionsScored']}.");
     }
 
     public function syncLivescores()
     {
-        $sync = new MatchSync(app(ApiTennisService::class));
-        $result = $sync->syncLivescores();
+        $sync = new MatchSync(app(SportradarService::class));
+        $result = $sync->syncLive();
 
         if (isset($result['error'])) {
             return back()->with('error', $result['error']);
@@ -76,12 +77,12 @@ class ApiSyncController extends Controller
 
         Setting::set('last_sync_livescores', now()->toDateTimeString());
 
-        return back()->with('success', "Livescores sincronizados: {$result['created']} creados, {$result['updated']} actualizados. Predicciones evaluadas: {$result['predictionsScored']}.");
+        return back()->with('success', "Livescores sincronizados: {$result['created']} creados, {$result['updated']} actualizados. Predicciones: {$result['predictionsScored']}.");
     }
 
     public function syncAll()
     {
-        $api = app(ApiTennisService::class);
+        $api = app(SportradarService::class);
         $messages = [];
 
         // Tournaments
@@ -95,12 +96,14 @@ class ApiSyncController extends Controller
         // Players
         $pSync = new PlayerSync($api);
         $pResult = $pSync->sync('all');
-        Setting::set('last_sync_players', now()->toDateTimeString());
-        $messages[] = "Jugadores: {$pResult['created']} creados, {$pResult['updated']} actualizados";
+        if (!isset($pResult['error'])) {
+            Setting::set('last_sync_players', now()->toDateTimeString());
+            $messages[] = "Jugadores: {$pResult['created']} creados, {$pResult['updated']} actualizados";
+        }
 
-        // Fixtures (next 7 days)
+        // Fixtures (all active tournaments)
         $mSync = new MatchSync($api);
-        $mResult = $mSync->syncFixtures(now()->format('Y-m-d'), now()->addDays(7)->format('Y-m-d'));
+        $mResult = $mSync->syncAll();
         if (!isset($mResult['error'])) {
             Setting::set('last_sync_fixtures', now()->toDateTimeString());
             $messages[] = "Partidos: {$mResult['created']} creados, {$mResult['updated']} actualizados";

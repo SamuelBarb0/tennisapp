@@ -2,132 +2,204 @@
 
 namespace App\Services\Sync;
 
+use App\Models\BracketPrediction;
 use App\Models\Player;
 use App\Models\TennisMatch;
 use App\Models\Tournament;
 use App\Models\Prediction;
 use App\Models\User;
-use App\Services\ApiTennisService;
+use App\Services\SportradarService;
+use App\Services\Sportradar\TournamentRegistry;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class MatchSync
 {
-    // Only sync singles matches
-    const SINGLES_TYPES = ['Atp Singles', 'Wta Singles'];
+    protected SportradarService $api;
 
-    protected ApiTennisService $api;
-
-    public function __construct(ApiTennisService $api)
+    public function __construct(SportradarService $api)
     {
         $this->api = $api;
     }
 
-    public function syncFixtures(string $dateStart, string $dateStop, ?int $tournamentKey = null): array
+    /**
+     * Sync all matches for a specific tournament (by season).
+     */
+    public function syncTournament(Tournament $tournament): array
     {
-        $fixtures = $this->api->getFixtures($dateStart, $dateStop, $tournamentKey);
+        $seasonId = $tournament->api_event_type_key;
 
-        if ($fixtures === null) {
-            return ['error' => 'No se pudo conectar con la API'];
+        if (!$seasonId) {
+            return ['error' => "Tournament {$tournament->name} has no season ID"];
         }
 
-        return $this->processMatches($fixtures);
-    }
+        $summaries = $this->api->getSeasonSummaries($seasonId);
 
-    public function syncLivescores(): array
-    {
-        $livescores = $this->api->getLivescores();
-
-        if ($livescores === null) {
-            return ['error' => 'No se pudo conectar con la API'];
+        if ($summaries === null) {
+            return ['error' => 'No se pudo conectar con Sportradar'];
         }
 
-        return $this->processMatches($livescores);
+        return $this->processSummaries($summaries, $tournament);
     }
 
-    protected function processMatches(array $matches): array
+    /**
+     * Sync all active tournaments' matches.
+     */
+    public function syncAll(): array
+    {
+        $tournaments = Tournament::whereNotNull('api_event_type_key')
+            ->where('is_active', true)
+            ->get();
+
+        $totals = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'predictionsScored' => 0];
+
+        foreach ($tournaments as $tournament) {
+            $result = $this->syncTournament($tournament);
+
+            if (isset($result['error'])) {
+                Log::warning("Skipping {$tournament->name}: {$result['error']}");
+                continue;
+            }
+
+            $totals['created'] += $result['created'];
+            $totals['updated'] += $result['updated'];
+            $totals['skipped'] += $result['skipped'];
+            $totals['predictionsScored'] += $result['predictionsScored'];
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Sync live matches only.
+     */
+    public function syncLive(): array
+    {
+        $summaries = $this->api->getLiveSummaries();
+
+        if ($summaries === null) {
+            return ['error' => 'No se pudo obtener live scores'];
+        }
+
+        // Filter only our target competitions
+        $filtered = array_filter($summaries, function ($s) {
+            $compId = $s['sport_event']['sport_event_context']['competition']['id'] ?? null;
+            return $compId && TournamentRegistry::isTarget($compId);
+        });
+
+        if (empty($filtered)) {
+            return ['created' => 0, 'updated' => 0, 'skipped' => 0, 'predictionsScored' => 0];
+        }
+
+        // Group by competition and process
+        $totals = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'predictionsScored' => 0];
+
+        foreach ($filtered as $summary) {
+            $compId = $summary['sport_event']['sport_event_context']['competition']['id'];
+            $tournament = Tournament::where('api_tournament_key', $compId)->first();
+
+            if (!$tournament) continue;
+
+            $result = $this->processSummaries([$summary], $tournament);
+            $totals['created'] += $result['created'];
+            $totals['updated'] += $result['updated'];
+            $totals['predictionsScored'] += $result['predictionsScored'];
+        }
+
+        return $totals;
+    }
+
+    protected function processSummaries(array $summaries, Tournament $tournament): array
     {
         $created = 0;
         $updated = 0;
         $skipped = 0;
         $predictionsScored = 0;
 
-        foreach ($matches as $m) {
-            // Only process singles matches
-            if (!in_array($m['event_type_type'] ?? '', self::SINGLES_TYPES)) {
+        foreach ($summaries as $s) {
+            $sportEvent = $s['sport_event'] ?? null;
+            $eventStatus = $s['sport_event_status'] ?? null;
+
+            if (!$sportEvent || !$eventStatus) {
                 $skipped++;
                 continue;
             }
 
-            // Skip cancelled matches
-            if (($m['event_status'] ?? '') === 'Cancelled') {
+            $eventId = $sportEvent['id'];
+            $competitors = $sportEvent['competitors'] ?? [];
+
+            if (count($competitors) < 2) {
                 $skipped++;
                 continue;
             }
 
-            // Find or create tournament
-            $tournament = Tournament::where('api_tournament_key', $m['tournament_key'])->first();
-            if (!$tournament) {
-                $type = str_contains($m['event_type_type'], 'Wta') ? 'WTA' : 'ATP';
-                $tournament = Tournament::create([
-                    'api_tournament_key' => $m['tournament_key'],
-                    'api_event_type_key' => $m['event_type_key'] ?? null,
-                    'name' => $m['tournament_name'],
-                    'slug' => Str::slug($m['tournament_name']),
-                    'type' => $type,
-                    'season' => $m['tournament_season'] ?? null,
-                    'start_date' => $m['event_date'],
-                    'end_date' => Carbon::parse($m['event_date'])->addDays(7),
-                    'is_active' => true,
-                ]);
+            // Skip matches with placeholder/TBD competitors
+            $hasPlaceholder = false;
+            foreach ($competitors as $c) {
+                $name = $c['name'] ?? '';
+                if (!str_contains($name, ',') && !str_contains($name, ' ') && strlen($name) < 10) {
+                    $hasPlaceholder = true;
+                    break;
+                }
+            }
+            if ($hasPlaceholder) {
+                $skipped++;
+                continue;
             }
 
-            // Update tournament dates based on fixtures
-            $eventDate = Carbon::parse($m['event_date']);
-            if (!$tournament->start_date || $eventDate->lt($tournament->start_date)) {
-                $tournament->update(['start_date' => $eventDate]);
+            // Skip qualification rounds — only main draw
+            $roundName = $sportEvent['sport_event_context']['round']['name'] ?? '';
+            $phase = $sportEvent['sport_event_context']['stage']['phase'] ?? '';
+            if ($phase === 'qualification') {
+                $skipped++;
+                continue;
             }
-            if (!$tournament->end_date || $eventDate->gt($tournament->end_date)) {
-                $tournament->update(['end_date' => $eventDate]);
-            }
+
+            $round = TournamentRegistry::mapRound($roundName);
 
             // Find or create players
-            $player1 = $this->findOrCreatePlayer($m['first_player_key'], $m['event_first_player'], $m['event_type_type']);
-            $player2 = $this->findOrCreatePlayer($m['second_player_key'], $m['event_second_player'], $m['event_type_type']);
+            $player1 = $this->findOrCreatePlayer($competitors[0], $tournament);
+            $player2 = $this->findOrCreatePlayer($competitors[1], $tournament);
 
             if (!$player1 || !$player2) {
                 $skipped++;
                 continue;
             }
 
-            // Determine match status
-            $status = $this->resolveStatus($m['event_status'] ?? '', $m['event_live'] ?? '0');
+            // Determine status
+            $status = $this->resolveStatus($eventStatus['status'] ?? '', $eventStatus['match_status'] ?? '');
 
             // Determine winner
             $winnerId = null;
-            if ($status === 'finished' && !empty($m['event_winner'])) {
-                $winnerId = $m['event_winner'] === 'First Player' ? $player1->id : $player2->id;
+            if ($status === 'finished' && !empty($eventStatus['winner_id'])) {
+                $winnerSrId = $eventStatus['winner_id'];
+                if ($winnerSrId === $competitors[0]['id']) {
+                    $winnerId = $player1->id;
+                } elseif ($winnerSrId === $competitors[1]['id']) {
+                    $winnerId = $player2->id;
+                }
             }
 
-            // Build score string from sets
-            $score = $this->buildScore($m['scores'] ?? []);
+            // Build score from period_scores
+            $score = $this->buildScore($eventStatus['period_scores'] ?? []);
 
-            // Parse scheduled datetime
-            $scheduledAt = Carbon::parse($m['event_date'] . ' ' . ($m['event_time'] ?? '00:00'));
+            // Scheduled time
+            $scheduledAt = Carbon::parse($sportEvent['start_time']);
 
-            // Parse round
-            $round = $this->parseRound($m['tournament_round'] ?? '');
-
-            // Check if match exists
-            $existingMatch = TennisMatch::where('api_event_key', $m['event_key'])->first();
+            // Check existing match
+            $existingMatch = TennisMatch::where('api_event_key', $eventId)->first();
             $wasFinished = $existingMatch ? $existingMatch->status === 'finished' : false;
+
+            // Bracket position from first competitor's bracket_number
+            $bracketPos = $competitors[0]['bracket_number'] ?? null;
 
             $matchData = [
                 'tournament_id' => $tournament->id,
                 'player1_id' => $player1->id,
                 'player2_id' => $player2->id,
                 'round' => $round,
+                'bracket_position' => $bracketPos,
                 'scheduled_at' => $scheduledAt,
                 'score' => $score,
                 'winner_id' => $winnerId,
@@ -138,7 +210,7 @@ class MatchSync
                 $existingMatch->update($matchData);
                 $updated++;
             } else {
-                $matchData['api_event_key'] = $m['event_key'];
+                $matchData['api_event_key'] = $eventId;
                 $existingMatch = TennisMatch::create($matchData);
                 $created++;
             }
@@ -149,68 +221,98 @@ class MatchSync
             }
         }
 
-        Log::info("Match sync completed", compact('created', 'updated', 'skipped', 'predictionsScored'));
+        // Update tournament status
+        $this->updateTournamentStatus($tournament);
 
+        Log::info("Match sync for {$tournament->name}", compact('created', 'updated', 'skipped', 'predictionsScored'));
         return compact('created', 'updated', 'skipped', 'predictionsScored');
     }
 
-    protected function findOrCreatePlayer($apiKey, string $name, string $eventType): ?Player
+    protected function findOrCreatePlayer(array $competitor, Tournament $tournament): ?Player
     {
-        if (empty($apiKey)) return null;
+        $srId = $competitor['id'] ?? null;
+        if (!$srId) return null;
 
-        $player = Player::where('api_player_key', $apiKey)->first();
+        $player = Player::where('api_player_key', $srId)->first();
         if ($player) return $player;
 
-        $category = str_contains($eventType, 'Wta') ? 'WTA' : 'ATP';
+        $name = $this->formatPlayerName($competitor['name'] ?? 'Unknown');
+        $countryCode = $competitor['country_code'] ?? 'UNK';
+        $country = $competitor['country'] ?? 'Unknown';
 
         return Player::create([
-            'api_player_key' => $apiKey,
+            'api_player_key' => $srId,
             'name' => $name,
             'slug' => Str::slug($name),
-            'country' => 'Unknown',
-            'nationality_code' => 'UNK',
-            'category' => $category,
+            'country' => $country,
+            'nationality_code' => $countryCode,
+            'ranking' => $competitor['seed'] ?? null,
+            'category' => str_contains($tournament->type, 'WTA') || str_contains($tournament->name, 'WTA') ? 'WTA' : 'ATP',
         ]);
     }
 
-    protected function resolveStatus(string $eventStatus, string $eventLive): string
+    protected function formatPlayerName(string $name): string
     {
-        if ($eventStatus === 'Finished') return 'finished';
-        if ($eventLive === '1') return 'live';
-        if (in_array($eventStatus, ['Set 1', 'Set 2', 'Set 3', 'Set 4', 'Set 5'])) return 'live';
-        return 'pending';
+        if (str_contains($name, ',')) {
+            $parts = explode(',', $name, 2);
+            return trim($parts[1]) . ' ' . trim($parts[0]);
+        }
+        return $name;
     }
 
-    protected function buildScore(array $scores): ?string
+    protected function resolveStatus(string $status, string $matchStatus): string
     {
-        if (empty($scores)) return null;
+        return match ($status) {
+            'closed', 'ended' => 'finished',
+            'live' => 'live',
+            'cancelled', 'postponed' => 'cancelled',
+            default => 'pending',
+        };
+    }
+
+    protected function buildScore(array $periodScores): ?string
+    {
+        if (empty($periodScores)) return null;
+
+        // Sort by set number
+        usort($periodScores, fn($a, $b) => ($a['number'] ?? 0) <=> ($b['number'] ?? 0));
 
         $parts = [];
-        foreach ($scores as $set) {
-            $parts[] = ($set['score_first'] ?? '0') . '-' . ($set['score_second'] ?? '0');
+        foreach ($periodScores as $set) {
+            if (($set['type'] ?? '') !== 'set') continue;
+            $parts[] = ($set['home_score'] ?? 0) . '-' . ($set['away_score'] ?? 0);
         }
 
-        return implode(' ', $parts);
+        return $parts ? implode(' ', $parts) : null;
     }
 
-    protected function parseRound(string $round): string
+    protected function updateTournamentStatus(Tournament $tournament): void
     {
-        if (empty($round)) return 'Unknown';
+        $totalMatches = $tournament->matches()->count();
+        $finishedMatches = $tournament->matches()->where('status', 'finished')->count();
+        $liveMatches = $tournament->matches()->where('status', 'live')->count();
 
-        // Remove tournament name prefix (e.g., "ATP Indian Wells - 1/16-finals" -> "1/16-finals")
-        $parts = explode(' - ', $round);
-        return end($parts) ?: $round;
+        if ($totalMatches > 0 && $finishedMatches === $totalMatches) {
+            $tournament->update(['status' => 'finished']);
+        } elseif ($liveMatches > 0) {
+            $tournament->update(['status' => 'live']);
+        } elseif ($finishedMatches > 0) {
+            $tournament->update(['status' => 'in_progress']);
+        } else {
+            $tournament->update(['status' => 'upcoming']);
+        }
     }
 
     protected function scorePredictions(TennisMatch $match): int
     {
-        $predictions = Prediction::where('match_id', $match->id)
-            ->whereNull('is_correct')
-            ->get();
-
         $scored = 0;
         $match->loadMissing('tournament');
         $roundPoints = $match->tournament->getPointsForRound($match->round);
+
+        // Score old-style predictions (per-match)
+        $predictions = Prediction::where('match_id', $match->id)
+            ->whereNull('is_correct')
+            ->get();
 
         foreach ($predictions as $prediction) {
             $isCorrect = $prediction->predicted_winner_id == $match->winner_id;
@@ -226,6 +328,40 @@ class MatchSync
             }
 
             $scored++;
+        }
+
+        // Score bracket predictions
+        // Calculate position: the match's index within its round (1-based)
+        $roundMatches = TennisMatch::where('tournament_id', $match->tournament_id)
+            ->where('round', $match->round)
+            ->orderByRaw('COALESCE(bracket_position, 999999)')
+            ->orderBy('scheduled_at')
+            ->pluck('id')
+            ->values();
+        $position = $roundMatches->search($match->id) + 1;
+
+        if ($position > 0) {
+            $bracketPreds = BracketPrediction::where('tournament_id', $match->tournament_id)
+                ->where('round', $match->round)
+                ->where('position', $position)
+                ->whereNull('is_correct')
+                ->get();
+
+            foreach ($bracketPreds as $bp) {
+                $isCorrect = $bp->predicted_winner_id == $match->winner_id;
+                $pointsEarned = $isCorrect ? $roundPoints : 0;
+
+                $bp->update([
+                    'is_correct' => $isCorrect,
+                    'points_earned' => $pointsEarned,
+                ]);
+
+                if ($isCorrect) {
+                    User::where('id', $bp->user_id)->increment('points', $pointsEarned);
+                }
+
+                $scored++;
+            }
         }
 
         return $scored;

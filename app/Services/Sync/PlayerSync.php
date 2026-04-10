@@ -3,51 +3,60 @@
 namespace App\Services\Sync;
 
 use App\Models\Player;
-use App\Services\ApiTennisService;
+use App\Services\SportradarService;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
 class PlayerSync
 {
-    protected ApiTennisService $api;
+    protected SportradarService $api;
 
-    public function __construct(ApiTennisService $api)
+    public function __construct(SportradarService $api)
     {
         $this->api = $api;
     }
 
     public function sync(string $category = 'all'): array
     {
+        $rankings = $this->api->getRankings();
+
+        if (!$rankings) {
+            return ['error' => 'No se pudo obtener rankings de Sportradar'];
+        }
+
         $totalCreated = 0;
         $totalUpdated = 0;
 
-        $categories = $category === 'all' ? ['ATP', 'WTA'] : [strtoupper($category)];
+        foreach ($rankings as $ranking) {
+            $rankingType = $ranking['type_id'] ?? null;
+            $cat = $this->resolveCategory($ranking['name'] ?? '', $rankingType);
 
-        foreach ($categories as $cat) {
-            $standings = $this->api->getStandings($cat);
-
-            if ($standings === null) {
-                Log::warning("Could not fetch {$cat} standings");
+            if ($category !== 'all' && strtoupper($category) !== $cat) {
                 continue;
             }
 
-            foreach ($standings as $s) {
-                // Find by api_player_key first, then by slug (for pre-existing seeded players)
-                $slug = Str::slug($s['player']);
-                $player = Player::where('api_player_key', $s['player_key'])->first()
-                    ?? Player::where('slug', $slug)->first();
+            $competitors = $ranking['competitor_rankings'] ?? [];
 
-                $countryName = $s['country'] ?? 'Unknown';
-                $nationalityCode = $this->getCountryCode($countryName);
+            foreach ($competitors as $cr) {
+                $competitor = $cr['competitor'] ?? null;
+                if (!$competitor) continue;
+
+                $competitorId = $competitor['id'];
+                $name = $this->formatName($competitor['name'] ?? '');
+                $countryCode = $competitor['country_code'] ?? 'UNK';
+                $country = $competitor['country'] ?? 'Unknown';
+                $rank = $cr['rank'] ?? null;
+
+                $player = Player::where('api_player_key', $competitorId)->first();
 
                 $data = [
-                    'name' => $s['player'],
-                    'slug' => $slug,
-                    'country' => $countryName,
-                    'nationality_code' => $nationalityCode,
-                    'ranking' => (int) $s['place'],
+                    'name' => $name,
+                    'slug' => Str::slug($name),
+                    'country' => $country,
+                    'nationality_code' => $countryCode,
+                    'ranking' => $rank,
                     'category' => $cat,
-                    'api_player_key' => $s['player_key'],
+                    'api_player_key' => $competitorId,
                 ];
 
                 if ($player) {
@@ -61,36 +70,26 @@ class PlayerSync
         }
 
         Log::info("Player sync completed", ['created' => $totalCreated, 'updated' => $totalUpdated]);
-
         return ['created' => $totalCreated, 'updated' => $totalUpdated];
     }
 
-    protected function getCountryCode(string $country): string
+    /**
+     * Sportradar names come as "Last, First" — convert to "First Last".
+     */
+    protected function formatName(string $name): string
     {
-        $codes = [
-            'Argentina' => 'ARG', 'Australia' => 'AUS', 'Austria' => 'AUT',
-            'Belarus' => 'BLR', 'Belgium' => 'BEL', 'Bolivia' => 'BOL',
-            'Bosnia and Herzegovina' => 'BIH', 'Brazil' => 'BRA', 'Bulgaria' => 'BUL',
-            'Canada' => 'CAN', 'Chile' => 'CHI', 'China' => 'CHN',
-            'Colombia' => 'COL', 'Croatia' => 'CRO', 'Czech Republic' => 'CZE',
-            'Denmark' => 'DEN', 'Dominican Republic' => 'DOM', 'Ecuador' => 'ECU',
-            'Egypt' => 'EGY', 'Estonia' => 'EST', 'Finland' => 'FIN',
-            'France' => 'FRA', 'Georgia' => 'GEO', 'Germany' => 'GER',
-            'Greece' => 'GRE', 'Hungary' => 'HUN', 'India' => 'IND',
-            'Israel' => 'ISR', 'Italy' => 'ITA', 'Japan' => 'JPN',
-            'Kazakhstan' => 'KAZ', 'Latvia' => 'LAT', 'Lithuania' => 'LTU',
-            'Luxembourg' => 'LUX', 'Mexico' => 'MEX', 'Moldova' => 'MDA',
-            'Montenegro' => 'MNE', 'Netherlands' => 'NED', 'New Zealand' => 'NZL',
-            'Norway' => 'NOR', 'Peru' => 'PER', 'Poland' => 'POL',
-            'Portugal' => 'POR', 'Romania' => 'ROU', 'Russia' => 'RUS',
-            'Serbia' => 'SRB', 'Slovakia' => 'SVK', 'Slovenia' => 'SLO',
-            'South Africa' => 'RSA', 'South Korea' => 'KOR', 'Spain' => 'ESP',
-            'Sweden' => 'SWE', 'Switzerland' => 'SUI', 'Taiwan' => 'TPE',
-            'Tunisia' => 'TUN', 'Turkey' => 'TUR', 'Ukraine' => 'UKR',
-            'United Kingdom' => 'GBR', 'United States' => 'USA', 'USA' => 'USA',
-            'Uruguay' => 'URU', 'Uzbekistan' => 'UZB', 'World' => 'WOR',
-        ];
+        if (str_contains($name, ',')) {
+            $parts = explode(',', $name, 2);
+            return trim($parts[1]) . ' ' . trim($parts[0]);
+        }
+        return $name;
+    }
 
-        return $codes[$country] ?? strtoupper(substr($country, 0, 3));
+    protected function resolveCategory(string $rankingName, ?int $typeId): string
+    {
+        if (stripos($rankingName, 'WTA') !== false || $typeId === 22) {
+            return 'WTA';
+        }
+        return 'ATP';
     }
 }

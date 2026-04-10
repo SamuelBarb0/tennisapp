@@ -35,9 +35,9 @@ return [
         ],
     ],
 
-    'api_tennis' => [
-        'key' => env('API_TENNIS_KEY'),
-        'base_url' => env('API_TENNIS_URL', 'https://api.api-tennis.com/tennis/'),
+    'sportradar' => [
+        'key' => env('SPORTRADAR_API_KEY'),
+        'base_url' => env('SPORTRADAR_BASE_URL', 'https://api.sportradar.com/tennis/production/v3/en/'),
     ],
 
 ];

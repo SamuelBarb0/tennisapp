@@ -13,7 +13,7 @@ class TennisMatch extends Model
 
     protected $fillable = [
         'tournament_id', 'player1_id', 'player2_id', 'round',
-        'scheduled_at', 'score', 'winner_id', 'status',
+        'bracket_position', 'scheduled_at', 'score', 'winner_id', 'status',
         'api_event_key',
     ];
 
@@ -21,6 +21,10 @@ class TennisMatch extends Model
     {
         return [
             'scheduled_at' => 'datetime',
+            'player1_id' => 'integer',
+            'player2_id' => 'integer',
+            'winner_id' => 'integer',
+            'tournament_id' => 'integer',
         ];
     }
 

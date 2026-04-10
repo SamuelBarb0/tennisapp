@@ -32,14 +32,14 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         @forelse($tournaments as $tournament)
         <a href="{{ route('tournaments.show', $tournament) }}" class="group block bg-white rounded-3xl overflow-hidden shadow-sm hover-lift border border-gray-100 fade-in" style="animation-delay: {{ $loop->index * 0.05 }}s">
-            <div class="h-44 bg-gradient-to-br {{ $tournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : ($tournament->type === 'ATP' ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center relative">
+            <div class="h-44 bg-gradient-to-br {{ $tournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($tournament->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center relative">
                 <span class="text-white/15 text-9xl font-black select-none">{{ substr($tournament->name, 0, 1) }}</span>
                 @if($tournament->is_premium)
                     <span class="absolute top-4 right-4 px-3 py-1 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full">PREMIUM</span>
                 @endif
-                @php $status = $tournament->status; @endphp
-                <span class="absolute top-4 left-4 px-3 py-1 {{ $status === 'live' ? 'bg-red-500 text-white' : ($status === 'upcoming' ? 'bg-white/90 text-gray-700' : 'bg-gray-700 text-white') }} text-xs font-medium rounded-full">
-                    {{ $status === 'live' ? 'En curso' : ($status === 'upcoming' ? 'Próximamente' : 'Finalizado') }}
+                @php $status = $tournament->computed_status; @endphp
+                <span class="absolute top-4 left-4 px-3 py-1 {{ $status === 'live' || $status === 'in_progress' ? 'bg-green-500 text-white' : ($status === 'upcoming' ? 'bg-white/90 text-gray-700' : 'bg-gray-700 text-white') }} text-xs font-medium rounded-full">
+                    {{ $status === 'live' ? 'En vivo' : ($status === 'in_progress' ? 'En curso' : ($status === 'upcoming' ? 'Próximamente' : 'Finalizado')) }}
                 </span>
             </div>
             <div class="p-5">

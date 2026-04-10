@@ -8,6 +8,7 @@ use App\Models\Tournament;
 use App\Models\User;
 use App\Models\Player;
 use App\Models\Setting;
+use Illuminate\Support\Facades\DB;
 
 class HomeController extends Controller
 {
@@ -51,7 +52,7 @@ class HomeController extends Controller
             }])
             ->first();
 
-        // Resultados recientes (partidos terminados, más recientes primero)
+        // Resultados recientes
         $recentResults = TennisMatch::with(['player1', 'player2', 'winner', 'tournament'])
             ->where('status', 'finished')
             ->whereNotNull('winner_id')
@@ -59,12 +60,37 @@ class HomeController extends Controller
             ->take(6)
             ->get();
 
-        // Top ranking de usuarios
-        $topUsers = User::where('is_admin', false)
-            ->where('points', '>', 0)
-            ->orderBy('points', 'desc')
-            ->take(10)
+        // Rankings per active tournament (instead of general ranking)
+        $activeTournaments = Tournament::where('is_active', true)
+            ->where('start_date', '>=', '2026-01-01')
+            ->whereIn('status', ['in_progress', 'live'])
+            ->whereHas('matches')
+            ->orderBy('start_date')
+            ->take(4)
             ->get();
+
+        $tournamentRankings = [];
+        foreach ($activeTournaments as $at) {
+            $ranking = User::select(
+                    'users.id', 'users.name',
+                    DB::raw('SUM(bracket_predictions.points_earned) as tournament_points'),
+                    DB::raw('SUM(CASE WHEN bracket_predictions.is_correct = 1 THEN 1 ELSE 0 END) as correct_count')
+                )
+                ->join('bracket_predictions', 'users.id', '=', 'bracket_predictions.user_id')
+                ->where('bracket_predictions.tournament_id', $at->id)
+                ->groupBy('users.id', 'users.name')
+                ->having('tournament_points', '>', 0)
+                ->orderByDesc('tournament_points')
+                ->take(5)
+                ->get();
+
+            if ($ranking->isNotEmpty()) {
+                $tournamentRankings[] = [
+                    'tournament' => $at,
+                    'ranking' => $ranking,
+                ];
+            }
+        }
 
         // Stats dinámicos
         $stats = [
@@ -76,7 +102,7 @@ class HomeController extends Controller
 
         return view('home', compact(
             'banners', 'nextTournament', 'upcomingTournaments',
-            'liveTournament', 'recentResults', 'topUsers', 'stats'
+            'liveTournament', 'recentResults', 'tournamentRankings', 'stats'
         ));
     }
 }

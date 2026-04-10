@@ -60,6 +60,15 @@ class Player extends Model
             'SIN'=>'sg','SLO'=>'si','SRB'=>'rs','SUI'=>'ch','SVK'=>'sk','SWE'=>'se','SYR'=>'sy',
             'THA'=>'th','TPE'=>'tw','TUN'=>'tn','TUR'=>'tr','UKR'=>'ua','URU'=>'uy','USA'=>'us',
             'UZB'=>'uz','VEN'=>'ve','VIE'=>'vn','ZIM'=>'zw','EL '=>'gr','WOR'=>'un',
+            // ISO 3166 alpha-3 codes (Sportradar uses these)
+            'DEU'=>'de','CHE'=>'ch','NLD'=>'nl','HRV'=>'hr','BGR'=>'bg','RUS'=>'ru',
+            'GRC'=>'gr','BLR'=>'by','SVN'=>'si','CHL'=>'cl','KHM'=>'kh','PRY'=>'py',
+            'PRT'=>'pt','MAR'=>'ma','MCO'=>'mc','MYS'=>'my','PHL'=>'ph','ARE'=>'ae',
+            'SAU'=>'sa','SGP'=>'sg','TWN'=>'tw','VNM'=>'vn','ZAF'=>'za','THA'=>'th',
+            'IRN'=>'ir','IRL'=>'ie','ISR'=>'il','CIV'=>'ci','JOR'=>'jo','LBN'=>'lb',
+            'LIE'=>'li','SYR'=>'sy','BFA'=>'bf','GHA'=>'gh','SEN'=>'sn','TUN'=>'tn',
+            'KWT'=>'kw','NPL'=>'np','NIC'=>'ni','GTM'=>'gt','HND'=>'hn','CRI'=>'cr',
+            'BOL'=>'bo','DOM'=>'do','ECU'=>'ec','PER'=>'pe','PRK'=>'kp','BIH'=>'ba',
         ];
 
         $code = strtoupper(trim($this->nationality_code ?? ''));

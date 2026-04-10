@@ -132,6 +132,119 @@
         </div>
     </div>
 
+    {{-- ═══ SIMULADOR DE TORNEOS TEST ═══ --}}
+    @php
+        $testTournaments = \App\Models\Tournament::where('slug', 'like', '%test%')
+            ->withCount(['matches', 'matches as finished_matches_count' => fn($q) => $q->where('status','finished')])
+            ->get();
+    @endphp
+    @if($testTournaments->count() > 0)
+    <div class="bg-white rounded-2xl border-2 border-orange-200 p-6">
+        <div class="flex items-center gap-3 mb-1">
+            <div class="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+                <h3 class="font-bold text-gray-900">Simulador de Torneos Test</h3>
+                <p class="text-xs text-gray-500">Simula resultados ronda a ronda para demos y pruebas</p>
+            </div>
+            <span class="ml-auto px-2.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">SOLO TEST</span>
+        </div>
+
+        <div class="mt-5 space-y-4">
+            @foreach($testTournaments as $t)
+            @php
+                $progress = $t->matches_count > 0 ? round(($t->finished_matches_count / $t->matches_count) * 100) : 0;
+                $nextRound = null;
+                foreach(['R128','R64','R32','R16','QF','SF','F'] as $r) {
+                    if(\App\Models\TennisMatch::where('tournament_id',$t->id)->where('round',$r)->where('status','pending')->exists()) {
+                        $nextRound = $r; break;
+                    }
+                }
+                $isComplete = $progress === 100;
+            @endphp
+            <div class="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                <div class="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                        <div class="font-semibold text-sm text-gray-900">{{ $t->name }}</div>
+                        <div class="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+                            <span class="px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{{ $t->type }}</span>
+                            <span>{{ $t->surface }}</span>
+                            <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                            <span>{{ $t->finished_matches_count }}/{{ $t->matches_count }} partidos</span>
+                            @if($nextRound && !$isComplete)
+                                <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                                <span class="text-orange-600 font-medium">Próxima: {{ $nextRound }}</span>
+                            @elseif($isComplete)
+                                <span class="text-green-600 font-medium">✓ Completado</span>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Barra de progreso --}}
+                <div class="w-full h-1.5 bg-gray-200 rounded-full mb-3 overflow-hidden">
+                    <div class="h-full bg-orange-400 rounded-full transition-all" style="width: {{ $progress }}%"></div>
+                </div>
+
+                {{-- Botones --}}
+                <div class="flex flex-wrap gap-2">
+                    {{-- Simular siguiente ronda --}}
+                    @if(!$isComplete)
+                    <form method="POST" action="{{ route('admin.simulate.next-round') }}" class="inline">
+                        @csrf
+                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
+                        <input type="hidden" name="upset" value="20">
+                        <button type="submit"
+                                class="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                            Simular {{ $nextRound ?? 'siguiente' }}
+                        </button>
+                    </form>
+
+                    {{-- Simular con upset --}}
+                    <form method="POST" action="{{ route('admin.simulate.next-round') }}" class="inline">
+                        @csrf
+                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
+                        <input type="hidden" name="upset" value="40">
+                        <button type="submit"
+                                class="flex items-center gap-1.5 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded-lg transition-colors"
+                                title="40% de probabilidad de sorpresa">
+                            🔥 Con upsets
+                        </button>
+                    </form>
+
+                    {{-- Simular todo --}}
+                    <form method="POST" action="{{ route('admin.simulate.all') }}" class="inline">
+                        @csrf
+                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
+                        <input type="hidden" name="upset" value="20">
+                        <button type="submit"
+                                class="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold rounded-lg transition-colors">
+                            ⚡ Simular todo
+                        </button>
+                    </form>
+                    @endif
+
+                    {{-- Reiniciar siempre disponible --}}
+                    <form method="POST" action="{{ route('admin.simulate.reset') }}" class="inline"
+                          onsubmit="return confirm('¿Reiniciar {{ addslashes($t->name) }}? Los resultados se borrarán.')">
+                        @csrf
+                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
+                        <button type="submit"
+                                class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold rounded-lg transition-colors">
+                            ↺ Reiniciar
+                        </button>
+                    </form>
+                </div>
+            </div>
+            @endforeach
+        </div>
+
+        <p class="mt-4 text-xs text-gray-400">* "Con upsets" aplica 40% de probabilidad de sorpresas. "Simular todo" completa el torneo de golpe.</p>
+    </div>
+    @endif
+
     {{-- Info Card --}}
     <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5">
         <div class="flex gap-3">

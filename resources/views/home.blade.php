@@ -4,52 +4,51 @@
 @section('content')
 {{-- Hero Section --}}
 <section class="relative bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark overflow-hidden">
-    <div class="absolute inset-0 opacity-10">
-        <div class="absolute top-20 left-10 w-72 h-72 bg-white rounded-full blur-3xl"></div>
-        <div class="absolute bottom-10 right-20 w-96 h-96 bg-white rounded-full blur-3xl"></div>
-    </div>
+    {{-- Orbes decorativos --}}
+    <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
+    <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24 relative">
         <div class="text-center fade-in">
             <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
                 Predice. Compite. <span class="text-tc-accent">Gana.</span>
             </h1>
-            <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
+            <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10" style="animation-delay:0.15s">
                 Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.
             </p>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <div class="flex flex-col sm:flex-row gap-4 justify-center fade-in" style="animation-delay:0.3s">
                 @guest
-                    <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">
+                    <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
                         Comenzar gratis
                     </a>
-                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur">
+                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
                         Ver torneos
                     </a>
                 @else
-                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">
+                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
                         Hacer pronósticos
                     </a>
-                    <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur">
+                    <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
                         ¿Cómo funciona?
                     </a>
                 @endguest
             </div>
         </div>
-        {{-- Stats dinámicos --}}
-        <div class="mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto slide-up">
+        {{-- Stats con contador animado --}}
+        <div class="mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto slide-up" style="animation-delay:0.45s">
             <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white">{{ $stats['tournaments'] }}</div>
+                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['tournaments'] }}</div>
                 <div class="text-sm text-blue-200 mt-1">Torneos</div>
             </div>
             <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white">{{ number_format($stats['players']) }}</div>
+                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['players'] }}</div>
                 <div class="text-sm text-blue-200 mt-1">Jugadores</div>
             </div>
             <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white">{{ number_format($stats['total_points']) }}</div>
+                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['total_points'] }}</div>
                 <div class="text-sm text-blue-200 mt-1">Puntos repartidos</div>
             </div>
             <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white">{{ number_format($stats['users']) }}</div>
+                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['users'] }}</div>
                 <div class="text-sm text-blue-200 mt-1">Participantes</div>
             </div>
         </div>
@@ -58,7 +57,7 @@
 
 {{-- ========== PRÓXIMO TORNEO PARA PREDECIR (Protagonista) ========== --}}
 @if($nextTournament)
-<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-10">
+<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-10 reveal">
     <div class="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
         <div class="md:flex">
             {{-- Lado izquierdo: info del torneo --}}
@@ -94,7 +93,7 @@
                 </a>
             </div>
             {{-- Lado derecho: visual del torneo --}}
-            <div class="md:w-1/2 bg-gradient-to-br {{ $nextTournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : ($nextTournament->type === 'ATP' ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center p-8 min-h-[200px]">
+            <div class="md:w-1/2 bg-gradient-to-br {{ $nextTournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($nextTournament->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center p-8 min-h-[200px]">
                 <div class="text-center text-white">
                     <span class="text-white/30 text-9xl font-black block leading-none">{{ substr($nextTournament->type, 0, 1) }}</span>
                     <span class="text-white/80 text-lg font-semibold mt-2 block">{{ $nextTournament->type }}</span>
@@ -107,7 +106,7 @@
 
 {{-- ========== TORNEO EN VIVO (si hay) ========== --}}
 @if($liveTournament)
-<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10">
+<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10 reveal">
     <div class="bg-white rounded-3xl shadow-sm p-6 border border-gray-100">
         <div class="flex items-center gap-3 mb-4">
             <span class="relative flex h-3 w-3">
@@ -161,8 +160,8 @@
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         @foreach($upcomingTournaments as $tournament)
-        <a href="{{ route('tournaments.show', $tournament) }}" class="group block bg-white rounded-3xl overflow-hidden shadow-sm hover-lift border border-gray-100">
-            <div class="h-32 bg-gradient-to-br {{ $tournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : ($tournament->type === 'ATP' ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center relative">
+        <a href="{{ route('tournaments.show', $tournament) }}" class="group block bg-white rounded-3xl overflow-hidden shadow-sm hover-lift border border-gray-100 reveal-scale" data-delay="{{ $loop->index * 80 }}">
+            <div class="h-32 bg-gradient-to-br {{ $tournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($tournament->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center relative">
                 <span class="text-white/20 text-7xl font-black">{{ substr($tournament->type, 0, 1) }}</span>
                 @if($tournament->is_premium)
                     <span class="absolute top-3 right-3 px-2.5 py-0.5 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full">PREMIUM</span>
@@ -189,67 +188,41 @@
 </section>
 @endif
 
-{{-- ========== TOP RANKING ========== --}}
-@if($topUsers->count() > 0)
+{{-- ========== TOURNAMENT RANKINGS ========== --}}
+@if(count($tournamentRankings) > 0)
 <section class="bg-white py-14">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between mb-6">
             <div>
-                <h2 class="text-2xl md:text-3xl font-bold">Ranking de Jugadores</h2>
-                <p class="text-sm text-gray-500 mt-1">Los mejores pronosticadores de Tennis Challenge</p>
+                <h2 class="text-2xl md:text-3xl font-bold">Rankings por Torneo</h2>
+                <p class="text-sm text-gray-500 mt-1">Los mejores pronosticadores en los torneos activos</p>
             </div>
-            <a href="{{ route('rankings.index') }}" class="text-tc-primary text-sm font-medium hover:underline">Ver completo &rarr;</a>
+            <a href="{{ route('rankings.index') }}" class="text-tc-primary text-sm font-medium hover:underline">Ver todos &rarr;</a>
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {{-- Podio: Top 3 --}}
-            <div class="lg:col-span-1 bg-gradient-to-br from-tc-primary to-tc-primary-hover rounded-3xl p-6 text-white">
-                <h3 class="text-sm font-medium text-white/70 mb-6 uppercase tracking-wider">Podio</h3>
-                @foreach($topUsers->take(3) as $index => $user)
-                <div class="flex items-center gap-4 {{ !$loop->last ? 'mb-5' : '' }}">
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold {{ $index === 0 ? 'bg-tc-accent text-tc-primary-dark' : ($index === 1 ? 'bg-white/20 text-white' : 'bg-orange-400/80 text-white') }}">
-                        {{ $index + 1 }}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            @foreach($tournamentRankings as $tr)
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden reveal" data-delay="{{ $trIndex * 100 }}">
+                <div class="bg-gradient-to-r {{ str_starts_with($tr['tournament']->type, 'ATP') ? 'from-tc-primary to-tc-primary/80' : 'from-purple-600 to-pink-500' }} px-5 py-3">
+                    <a href="{{ route('tournaments.show', $tr['tournament']) }}" class="text-white font-bold text-sm hover:underline">{{ $tr['tournament']->name }}</a>
+                    <div class="text-white/60 text-[10px] mt-0.5">{{ $tr['tournament']->city }}, {{ $tr['tournament']->country }}</div>
+                </div>
+                @foreach($tr['ranking'] as $i => $ru)
+                <div class="flex items-center gap-3 px-5 py-2.5 {{ !$loop->last ? 'border-b border-gray-50' : '' }}">
+                    <div class="w-6 h-6 flex items-center justify-center rounded-full text-[10px] font-bold {{ $i === 0 ? 'bg-tc-accent text-tc-primary' : 'bg-gray-100 text-gray-400' }}">
+                        {{ $i + 1 }}
                     </div>
-                    <div class="flex-1">
-                        <div class="font-semibold text-sm">{{ $user->name }}</div>
-                        <div class="text-xs text-white/60">{{ $user->predictions_count ?? 0 }} pronósticos</div>
+                    <div class="w-7 h-7 bg-tc-primary rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                        {{ strtoupper(substr($ru->name, 0, 1)) }}
                     </div>
-                    <div class="text-right">
-                        <div class="font-bold text-tc-accent">{{ number_format($user->points) }}</div>
-                        <div class="text-xs text-white/50">pts</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium truncate">{{ $ru->name }}</div>
+                        <div class="text-[10px] text-gray-400">{{ $ru->correct_count }} aciertos</div>
                     </div>
+                    <div class="text-sm font-bold text-tc-primary">{{ number_format($ru->tournament_points) }} pts</div>
                 </div>
                 @endforeach
             </div>
-
-            {{-- Tabla: Posiciones 4-10 --}}
-            <div class="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-50">
-                    <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Clasificación General</h3>
-                </div>
-                @foreach($topUsers as $index => $user)
-                @if($index >= 3)
-                <div class="flex items-center gap-4 px-6 py-3.5 {{ !$loop->last ? 'border-b border-gray-50' : '' }} hover:bg-gray-50 transition-colors">
-                    <div class="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-xs font-bold">
-                        {{ $index + 1 }}
-                    </div>
-                    <div class="w-8 h-8 bg-tc-primary rounded-full flex items-center justify-center text-white text-xs font-bold">
-                        {{ strtoupper(substr($user->name, 0, 1)) }}
-                    </div>
-                    <div class="flex-1">
-                        <div class="font-medium text-sm">{{ $user->name }}</div>
-                    </div>
-                    <div class="text-right">
-                        <div class="font-bold text-tc-primary text-sm">{{ number_format($user->points) }} pts</div>
-                    </div>
-                </div>
-                @endif
-                @endforeach
-                @if($topUsers->count() <= 3)
-                <div class="px-6 py-8 text-center text-sm text-gray-400">
-                    Más participantes se unirán pronto
-                </div>
-                @endif
-            </div>
+            @endforeach
         </div>
     </div>
 </section>
@@ -266,7 +239,7 @@
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         @foreach($recentResults as $match)
-        <div class="bg-white rounded-2xl p-5 hover-lift border border-gray-100 shadow-sm">
+        <div class="bg-white rounded-2xl p-5 hover-lift border border-gray-100 shadow-sm reveal" data-delay="{{ $loop->index * 60 }}">
             <div class="text-xs text-gray-500 mb-3 flex items-center justify-between">
                 <span>{{ $match->tournament->name }} &middot; {{ $match->round }}</span>
                 <span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-medium">FINAL</span>

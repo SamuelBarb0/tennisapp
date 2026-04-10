@@ -2,31 +2,40 @@
 
 namespace App\Console\Commands;
 
-use App\Services\ApiTennisService;
+use App\Models\Tournament;
+use App\Services\SportradarService;
 use App\Services\Sync\MatchSync;
 use Illuminate\Console\Command;
 
 class SyncFixtures extends Command
 {
-    protected $signature = 'tennis:sync-fixtures {--from= : Fecha inicio (Y-m-d)} {--to= : Fecha fin (Y-m-d)}';
-    protected $description = 'Sincronizar partidos/fixtures desde API Tennis';
+    protected $signature = 'tennis:sync-fixtures {--tournament= : ID del torneo específico}';
+    protected $description = 'Sincronizar partidos de torneos activos desde Sportradar';
 
     public function handle(): int
     {
-        $from = $this->option('from') ?: now()->format('Y-m-d');
-        $to = $this->option('to') ?: now()->addDays(7)->format('Y-m-d');
+        $sync = new MatchSync(app(SportradarService::class));
 
-        $this->info("Sincronizando partidos del {$from} al {$to}...");
+        if ($tournamentId = $this->option('tournament')) {
+            $tournament = Tournament::find($tournamentId);
+            if (!$tournament) {
+                $this->error("Torneo no encontrado: {$tournamentId}");
+                return self::FAILURE;
+            }
 
-        $sync = new MatchSync(app(ApiTennisService::class));
-        $result = $sync->syncFixtures($from, $to);
+            $this->info("Sincronizando partidos de {$tournament->name}...");
+            $result = $sync->syncTournament($tournament);
+        } else {
+            $this->info('Sincronizando partidos de todos los torneos activos...');
+            $result = $sync->syncAll();
+        }
 
         if (isset($result['error'])) {
             $this->error($result['error']);
             return self::FAILURE;
         }
 
-        $this->info("Creados: {$result['created']} | Actualizados: {$result['updated']} | Omitidos: {$result['skipped']} | Predicciones evaluadas: {$result['predictionsScored']}");
+        $this->info("Creados: {$result['created']} | Actualizados: {$result['updated']} | Omitidos: {$result['skipped']} | Predicciones: {$result['predictionsScored']}");
         return self::SUCCESS;
     }
 }
