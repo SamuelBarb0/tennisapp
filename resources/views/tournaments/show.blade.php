@@ -406,7 +406,7 @@
 
         {{-- ═══════ PANEL SIMULADOR (solo admins) ═══════ --}}
         @auth
-        @if(auth()->user()->is_admin && str_contains($tournament->slug, 'test'))
+        @if(auth()->user()->is_admin && str_contains($tournament->slug, 'test') && $bracketSaved)
         @php
             $roundOrder = ['R128','R64','R32','R16','QF','SF','F'];
             $roundLabelsSimulator = ['R128'=>'1ra Ronda','R64'=>'2da Ronda','R32'=>'3ra Ronda','R16'=>'Octavos','QF'=>'Cuartos','SF'=>'Semifinal','F'=>'Final'];
