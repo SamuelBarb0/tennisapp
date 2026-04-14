@@ -404,6 +404,73 @@
         @endif
         @endauth
 
+        {{-- ═══════ PANEL SIMULADOR (solo admins) ═══════ --}}
+        @auth
+        @if(auth()->user()->is_admin && str_contains($tournament->slug, 'test'))
+        @php
+            $roundOrder = ['R128','R64','R32','R16','QF','SF','F'];
+            $roundLabelsSimulator = ['R128'=>'1ra Ronda','R64'=>'2da Ronda','R32'=>'3ra Ronda','R16'=>'Octavos','QF'=>'Cuartos','SF'=>'Semifinal','F'=>'Final'];
+            $pendingRound = collect($roundOrder)->first(fn($r) => isset($matches[$r]) && $matches[$r]->where('status','pending')->count() > 0);
+            $totalMatches = collect($matches)->flatten()->where('status','!=','bye')->count();
+            $finishedMatches = collect($matches)->flatten()->where('status','finished')->count();
+            $isSimComplete = $finishedMatches >= $totalMatches;
+        @endphp
+        <div class="border-b-2 border-orange-200 bg-orange-50">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+                    <span class="text-xs font-black text-orange-700 uppercase tracking-wider">Simulador</span>
+                    <span class="text-[10px] text-orange-500 font-mono">{{ $finishedMatches }}/{{ $totalMatches }}</span>
+                </div>
+
+                {{-- Progress bar --}}
+                <div class="flex-1 min-w-[80px] h-1.5 bg-orange-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-orange-400 to-orange-500 rounded-full transition-all"
+                         style="width: {{ $totalMatches > 0 ? round($finishedMatches / $totalMatches * 100) : 0 }}%"></div>
+                </div>
+
+                @if($pendingRound)
+                <span class="text-[10px] text-orange-600 font-semibold shrink-0">
+                    Siguiente: <strong>{{ $roundLabelsSimulator[$pendingRound] ?? $pendingRound }}</strong>
+                </span>
+                @endif
+
+                <div class="flex flex-wrap gap-2 ml-auto">
+                    @if(!$isSimComplete)
+                    {{-- Simular siguiente ronda --}}
+                    <form method="POST" action="{{ route('admin.simulate.next-round') }}">
+                        @csrf
+                        <input type="hidden" name="tournament_id" value="{{ $tournament->id }}">
+                        <input type="hidden" name="upset" value="20">
+                        <button type="submit" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-lg transition-all">
+                            ▶ Siguiente ronda
+                        </button>
+                    </form>
+                    {{-- Simular todo --}}
+                    <form method="POST" action="{{ route('admin.simulate.all') }}">
+                        @csrf
+                        <input type="hidden" name="tournament_id" value="{{ $tournament->id }}">
+                        <input type="hidden" name="upset" value="20">
+                        <button type="submit" class="px-3 py-1.5 bg-orange-700 hover:bg-orange-800 text-white text-[11px] font-bold rounded-lg transition-all">
+                            ⚡ Simular todo
+                        </button>
+                    </form>
+                    @endif
+                    {{-- Reiniciar --}}
+                    <form method="POST" action="{{ route('admin.simulate.reset') }}"
+                          onsubmit="return confirm('¿Reiniciar el torneo? Se borrarán todos los resultados y predicciones.')">
+                        @csrf
+                        <input type="hidden" name="tournament_id" value="{{ $tournament->id }}">
+                        <button type="submit" class="px-3 py-1.5 bg-white border border-orange-300 hover:bg-orange-50 text-orange-700 text-[11px] font-bold rounded-lg transition-all">
+                            ↺ Reiniciar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        @endif
+        @endauth
+
         {{-- ═══════ BRACKET ═══════ --}}
         <div class="draw-scroll overflow-x-auto px-4 sm:px-6 py-8">
             <div style="width: max-content; margin: 0 auto;">
