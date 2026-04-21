@@ -166,7 +166,18 @@ class SimulationController extends Controller
             $favIsP1 = $p1Rank <= $p2Rank;
 
             $winnerId = ($isUpset xor $favIsP1) ? $match->player2_id : $match->player1_id;
-            $score    = $this->generateScore($isUpset);
+            $winnerIsP1 = ($winnerId === $match->player1_id);
+            // generateScore() returns "winner-loser" pairs. Flip each set if p2 is the winner
+            // so player1's column in the view always shows player1's own sets.
+            $score = $this->generateScore($isUpset);
+            if (!$winnerIsP1) {
+                $score = collect(explode(' ', $score))
+                    ->map(function ($set) {
+                        $parts = explode('-', $set);
+                        return (count($parts) === 2) ? $parts[1] . '-' . $parts[0] : $set;
+                    })
+                    ->implode(' ');
+            }
 
             $match->update(['status' => 'finished', 'winner_id' => $winnerId, 'score' => $score]);
             $scored += $this->scorePredictions($tournament, $match, $round);

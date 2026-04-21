@@ -9,6 +9,7 @@ class BracketPrediction extends Model
     protected $fillable = [
         'tournament_id', 'user_id', 'round', 'position',
         'predicted_winner_id', 'is_correct', 'points_earned',
+        'final_score_prediction',
     ];
 
     protected function casts(): array

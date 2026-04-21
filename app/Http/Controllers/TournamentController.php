@@ -156,6 +156,7 @@ class TournamentController extends Controller
         // User's bracket predictions for this tournament
         $userBracketPicks = collect();
         $bracketSaved = false;
+        $userFinalScore = null;
         if (auth()->check()) {
             $userBracketPicks = BracketPrediction::where('tournament_id', $tournament->id)
                 ->where('user_id', auth()->id())
@@ -163,6 +164,46 @@ class TournamentController extends Controller
                 ->groupBy('round')
                 ->map(fn($items) => $items->keyBy('position'));
             $bracketSaved = $userBracketPicks->isNotEmpty();
+
+            // Final score prediction (stored on the F/position=1 row)
+            $finalPrediction = BracketPrediction::where('tournament_id', $tournament->id)
+                ->where('user_id', auth()->id())
+                ->where('round', 'F')
+                ->where('position', 1)
+                ->first();
+            $userFinalScore = $finalPrediction?->final_score_prediction;
+        }
+
+        // Points earned per round by current user (for header display)
+        $userRoundPoints = [];
+        $userTotalPoints = 0;
+        if (auth()->check() && $bracketSaved) {
+            foreach ($userBracketPicks as $round => $positions) {
+                $roundTotal = 0;
+                foreach ($positions as $pred) {
+                    $roundTotal += (int) ($pred->points_earned ?? 0);
+                }
+                $userRoundPoints[$round] = $roundTotal;
+                $userTotalPoints += $roundTotal;
+            }
+        }
+
+        // Detect if bracket is "fillable" — every non-bye first-round match has two real players
+        $roundOrderCheck = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
+        $firstRoundKey = collect($roundOrderCheck)->first(fn($r) => isset($matches[$r]));
+        $bracketFillable = false;
+        if ($firstRoundKey) {
+            $placeholderRe = '/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i';
+            $hasReal = 0;
+            $totalSlots = 0;
+            foreach ($matches[$firstRoundKey] as $m) {
+                if ($m->status === 'bye') continue;
+                $totalSlots++;
+                $p1Real = $m->player1 && !preg_match($placeholderRe, $m->player1->name);
+                $p2Real = $m->player2 && !preg_match($placeholderRe, $m->player2->name);
+                if ($p1Real && $p2Real) $hasReal++;
+            }
+            $bracketFillable = $totalSlots > 0 && $hasReal === $totalSlots;
         }
 
         // Build bracket structure: for each round, list of matchups with bracket positions
@@ -211,7 +252,8 @@ class TournamentController extends Controller
 
         return view('tournaments.show', compact(
             'tournament', 'matches', 'tournamentRanking',
-            'predictionsLocked', 'lockDate', 'bracketData', 'userPicksJs', 'bracketSaved'
+            'predictionsLocked', 'lockDate', 'bracketData', 'userPicksJs', 'bracketSaved',
+            'bracketFillable', 'userFinalScore', 'userRoundPoints', 'userTotalPoints'
         ));
     }
 

@@ -28,28 +28,42 @@ class BracketPredictionController extends Controller
             ], 422);
         }
 
-        // Check if user already saved a bracket (no changes allowed)
-        $existing = BracketPrediction::where('tournament_id', $tournament->id)
-            ->where('user_id', auth()->id())
-            ->exists();
-
-        if ($existing) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Ya guardaste tu bracket. No se puede modificar.',
-            ], 422);
-        }
-
         $request->validate([
             'picks' => 'required|array',
             'picks.*' => 'array',
             'picks.*.*' => 'integer|exists:players,id',
+            'final_score' => 'nullable|string|max:20',
         ]);
 
         $picks = $request->input('picks');
+        $finalScore = $request->input('final_score');
+
+        // Before rewriting, clean picks that are no longer valid (player changed in a round)
+        // We allow full update while tournament hasn't started.
+        $existingRows = BracketPrediction::where('tournament_id', $tournament->id)
+            ->where('user_id', auth()->id())
+            ->get();
+
+        // Delete rows for round/position not present in new picks
+        $newKeys = [];
+        foreach ($picks as $round => $positions) {
+            foreach ($positions as $position => $playerId) {
+                $newKeys[] = $round . '|' . (int)$position;
+            }
+        }
+        foreach ($existingRows as $row) {
+            $key = $row->round . '|' . (int)$row->position;
+            if (!in_array($key, $newKeys, true)) {
+                $row->delete();
+            }
+        }
 
         foreach ($picks as $round => $positions) {
             foreach ($positions as $position => $playerId) {
+                $attrs = ['predicted_winner_id' => $playerId];
+                if ($round === 'F' && (int)$position === 1 && $finalScore !== null) {
+                    $attrs['final_score_prediction'] = $finalScore;
+                }
                 BracketPrediction::updateOrCreate(
                     [
                         'tournament_id' => $tournament->id,
@@ -57,7 +71,7 @@ class BracketPredictionController extends Controller
                         'round' => $round,
                         'position' => (int) $position,
                     ],
-                    ['predicted_winner_id' => $playerId]
+                    $attrs
                 );
             }
         }
@@ -86,7 +100,6 @@ class BracketPredictionController extends Controller
     public static function scoreTournament(Tournament $tournament): int
     {
         $scored = 0;
-        $roundOrder = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
 
         // Get all finished matches grouped by round with bracket position
         $matches = $tournament->matches()
@@ -94,6 +107,13 @@ class BracketPredictionController extends Controller
             ->whereNotNull('winner_id')
             ->orderBy('bracket_position')
             ->get();
+
+        // Collect eliminated player IDs (matches finished where they lost)
+        $eliminated = [];
+        foreach ($matches as $match) {
+            if ($match->player1_id && $match->player1_id != $match->winner_id) $eliminated[$match->player1_id] = true;
+            if ($match->player2_id && $match->player2_id != $match->winner_id) $eliminated[$match->player2_id] = true;
+        }
 
         foreach ($matches as $match) {
             $round = $match->round;
@@ -124,6 +144,19 @@ class BracketPredictionController extends Controller
                     \App\Models\User::where('id', $pred->user_id)->increment('points', $earned);
                 }
 
+                $scored++;
+            }
+        }
+
+        // Mark as incorrect any pending prediction whose picked player is already eliminated —
+        // they can't possibly win a later round.
+        if (!empty($eliminated)) {
+            $stale = BracketPrediction::where('tournament_id', $tournament->id)
+                ->whereNull('is_correct')
+                ->whereIn('predicted_winner_id', array_keys($eliminated))
+                ->get();
+            foreach ($stale as $pred) {
+                $pred->update(['is_correct' => false, 'points_earned' => 0]);
                 $scored++;
             }
         }
