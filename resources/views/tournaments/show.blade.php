@@ -22,8 +22,10 @@
     .pr .sets .ss { width: 10px; text-align: center; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 9px; font-weight: 800; }
     .pr.w  { background: #1b3d5d; color: #fff; border-left-color: #eee539; }
     .pr.w .ss { color: #eee539; font-weight: 800; }
+    .pr.w .seed { color: #eee539 !important; }
     .pr.l  { background: #f8fafc; color: #94a3b8; }
     .pr.l .ss { color: #cbd5e1; }
+    .pr.l .seed { color: #cbd5e1 !important; }
     .pr.n  { background: #fff; color: #334155; border-left-color: #e2e8f0; }
     .pr.lv { background: #fff; color: #334155; border-left-color: #f97316; }
 
@@ -123,6 +125,18 @@
         50%      { filter: drop-shadow(0 0 14px rgba(238,229,57,0.6)); }
     }
 
+    /* ─── Score input (final tiebreaker) ─── */
+    .tc-score-input {
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1;
+        padding: 0;
+        -moz-appearance: textfield;
+    }
+    .tc-score-input::-webkit-outer-spin-button,
+    .tc-score-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
     /* ─── Champion card ─── */
     .champion-wrap {
         border: 2px solid #eee539;
@@ -195,6 +209,12 @@
     $isGrandSlam = $type === 'GrandSlam';
     $isATP       = str_starts_with($type, 'ATP');
     $isWTA       = str_starts_with($type, 'WTA');
+
+    // Max sets for the final: Grand Slams men's = best of 5, everything else = best of 3.
+    // Grand Slam women's also play best of 3, so we check for WTA Grand Slams via category or tour.
+    $category = strtolower($tournament->category ?? $tournament->tour ?? '');
+    $isWomens = $isWTA || str_contains($category, 'wta') || str_contains($category, 'women') || str_contains($category, 'femenin');
+    $finalMaxSets = ($isGrandSlam && !$isWomens) ? 5 : 3;
 
     // Per-category visual identity
     $heroCfg = match(true) {
@@ -383,7 +403,7 @@
         $roundLabels[$k] = $v;
     }
 
-    $isPlaceholderName = fn($name) => !$name || preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i', $name);
+    $isPlaceholderName = fn($name) => !$name || preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)(\s?\d+)?$/i', $name);
     $validPositionsMap = $bracketRounds->mapWithKeys(function($r) use ($matches, $isPlaceholderName) {
         $positions = [];
         foreach ($matches[$r]->sortBy('bracket_position')->values() as $i => $m) {
@@ -413,6 +433,33 @@
             }
         }
     }
+
+    // Required picks per round: count of matchups the user must resolve.
+    // First round = real 2-player matches (no BYE / TBD). Each subsequent round = half.
+    $placeholderRe = '/^(Qf|SF|WSF|WQF|F|Ganador|TBD)(\s?\d+)?$/i';
+    $firstRoundCode = $bracketRounds->first();
+    $firstFillable = 0;
+    $firstByes = 0;
+    if ($firstRoundCode) {
+        foreach ($matches[$firstRoundCode] as $m) {
+            if ($m->status === 'bye') { $firstByes++; continue; }
+            $p1Real = $m->player1 && !preg_match($placeholderRe, $m->player1->name);
+            $p2Real = $m->player2 && !preg_match($placeholderRe, $m->player2->name);
+            if ($p1Real && $p2Real) $firstFillable++;
+        }
+    }
+    $requiredPicksMap = [];
+    $currentRoundCount = $firstFillable;
+    foreach ($bracketRounds as $i => $r) {
+        if ($i === 0) {
+            $requiredPicksMap[$r] = $currentRoundCount;
+        } else {
+            if ($i === 1) $currentRoundCount = intdiv($currentRoundCount + $firstByes, 2);
+            else $currentRoundCount = intdiv($currentRoundCount, 2);
+            $requiredPicksMap[$r] = $currentRoundCount;
+        }
+    }
+    $requiredPicksMap = array_filter($requiredPicksMap, fn($c) => $c > 0);
 @endphp
 
 <div class="bg-gradient-to-b from-gray-50 to-gray-100/60 min-h-[60vh]">
@@ -449,14 +496,8 @@
                     <div class="w-6 h-6 rounded-lg bg-tc-accent flex items-center justify-center shrink-0">
                         <svg class="w-3.5 h-3.5 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z"/></svg>
                     </div>
-                    <span class="text-sm font-bold text-tc-primary">
-                        @if($bracketSaved)Edita tu bracket@else Llena tu bracket @endif
-                    </span>
-                    <span class="text-xs text-gray-400 hidden sm:inline">
-                        @if($bracketSaved)— Puedes modificarlo hasta que inicie el torneo
-                        @else— Haz click en el jugador que crees que ganará
-                        @endif
-                    </span>
+                    <span class="text-sm font-bold text-tc-primary">{{ $bracketSaved ? 'Edita tu bracket' : 'Llena tu bracket' }}</span>
+                    <span class="text-xs text-gray-400 hidden sm:inline">{{ $bracketSaved ? '— Puedes modificarlo hasta que inicie el torneo' : '— Haz click en el jugador que crees que ganará' }}</span>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="text-[10px] font-mono text-gray-400 hidden sm:inline" x-text="totalPicks + '/' + totalRequired + ' picks'"></span>
@@ -465,7 +506,9 @@
                         :class="isComplete
                             ? 'bg-tc-primary text-white hover:bg-tc-primary-hover hover:shadow-md'
                             : 'bg-gray-200 text-gray-400 cursor-not-allowed'">
-                        <span x-show="!saving" x-text="isComplete ? ('{{ $bracketSaved ? 'Actualizar Bracket' : 'Guardar Bracket' }}') : 'Bracket incompleto'"></span>
+                        <span x-show="!saving" x-text="isComplete
+                            ? ('{{ $bracketSaved ? 'Actualizar Bracket' : 'Guardar Bracket' }}')
+                            : (totalPicks >= totalRequired && !isFinalScoreValid ? 'Falta marcador final' : 'Bracket incompleto')"></span>
                         <span x-show="saving">Guardando...</span>
                     </button>
                 </div>
@@ -476,7 +519,7 @@
 
         {{-- ═══════ PANEL SIMULADOR (solo admins) ═══════ --}}
         @auth
-        @if(auth()->user()->is_admin && str_contains($tournament->slug, 'test') && $bracketSaved)
+        @if(auth()->user()->is_admin && str_contains($tournament->slug, 'test'))
         @php
             $roundOrder = ['R128','R64','R32','R16','QF','SF','F'];
             $roundLabelsSimulator = $roundLabels;
@@ -616,7 +659,7 @@
                         <div class="px-1" style="position:absolute; width:100%; transform:translateY(-50%); top:{{ $centerPx }}px;">
                             <div class="bye-card">
                                 <div class="pr n" style="opacity:0.55;">
-                                    <span class="text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player1->ranking ?? '' }}</span>
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player1->ranking ?? '' }}</span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
                                     <span class="font-semibold truncate flex-1">{{ strtoupper($match->player1->name) }}</span>
                                 </div>
@@ -636,8 +679,8 @@
                             $isCancelled    = $match->status === 'cancelled';
                             $p1Won          = $match->winner_id && $match->winner_id == $match->player1_id;
                             $p2Won          = $match->winner_id && $match->winner_id == $match->player2_id;
-                            $isPlaceholder1 = $match->player1 && preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i', $match->player1->name);
-                            $isPlaceholder2 = $match->player2 && preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i', $match->player2->name);
+                            $isPlaceholder1 = $match->player1 && preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)(\s?\d+)?$/i', $match->player1->name);
+                            $isPlaceholder2 = $match->player2 && preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)(\s?\d+)?$/i', $match->player2->name);
                             $position       = $mi + 1;
                             $userPick       = $userPicksJs[$round][$position] ?? null;
                             $pickPlayerId   = $userPick['player_id'] ?? null;
@@ -707,7 +750,7 @@
                                      :class="{ 'pk': isPickedHere('{{ $round }}', {{ $position }}, {{ $match->player1_id }}) }"
                                      @endif
                                      @endauth>
-                                    <span class="text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player1->ranking ?? '' }}</span>
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player1->ranking ?? '' }}</span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
                                     <span class="pname font-semibold truncate">{{ strtoupper($match->player1->name) }}</span>
                                     @if($match->score)
@@ -759,7 +802,7 @@
                                      :class="{ 'pk': isPickedHere('{{ $round }}', {{ $position }}, {{ $match->player2_id }}) }"
                                      @endif
                                      @endauth>
-                                    <span class="text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player2->ranking ?? '' }}</span>
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player2->ranking ?? '' }}</span>
                                     <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
                                     <span class="pname font-semibold truncate">{{ strtoupper($match->player2->name) }}</span>
                                     @if($match->score)
@@ -864,11 +907,25 @@
                         $champion   = $matches[$finalRound]->first()?->winner;
                         $userChampionId = $userPicksJs[$finalRound][1]['player_id'] ?? null;
                         $userChampion = $userChampionId ? ($playersById[$userChampionId] ?? null) : null;
+
+                        // Detect the user's predicted runner-up for the final (the SF winner
+                        // the user picked in the other half of the bracket).
+                        $sfIndex = $bracketRounds->search('SF');
+                        $userFinalistId = null;
+                        $userFinalist = null;
+                        if ($sfIndex !== false && $userChampionId) {
+                            $sfRound = $bracketRounds[$sfIndex];
+                            $sfPick1 = $userPicksJs[$sfRound][1]['player_id'] ?? null;
+                            $sfPick2 = $userPicksJs[$sfRound][2]['player_id'] ?? null;
+                            if ($sfPick1 && $sfPick1 != $userChampionId) $userFinalistId = $sfPick1;
+                            elseif ($sfPick2 && $sfPick2 != $userChampionId) $userFinalistId = $sfPick2;
+                            $userFinalist = $userFinalistId ? ($playersById[$userFinalistId] ?? null) : null;
+                        }
                     @endphp
                     <div style="width:26px; height:{{ $totalH }}px; display:flex; align-items:center; flex-shrink:0;">
                         <svg width="26" height="2" style="display:block;"><line x1="0" y1="1" x2="26" y2="1" stroke="#cbd5e1" stroke-width="1.2"/></svg>
                     </div>
-                    <div style="width:160px; height:{{ $totalH }}px; display:flex; align-items:center; flex-shrink:0;">
+                    <div style="width:200px; height:{{ $totalH }}px; display:flex; align-items:center; flex-shrink:0;">
                         <div class="w-full px-1">
                             @if($champion)
                             <div class="champion-wrap">
@@ -898,27 +955,82 @@
                                 @endif
                                 @endauth
                             </div>
-                            @elseif($userChampion)
-                            <div class="champion-predicted">
-                                <div class="trophy-glow mb-2">
-                                    <svg class="w-8 h-8 mx-auto text-tc-accent" fill="currentColor" viewBox="0 0 24 24">
+                            @else
+                            {{-- Reactive champion/finalist/score panel.
+                                 Shows predictedChampion card when user has a final pick,
+                                 otherwise a "Por definir" placeholder. Everything reacts
+                                 to picks changes via Alpine. --}}
+                            <template x-if="predictedChampion">
+                                <div class="champion-predicted">
+                                    <div class="trophy-glow mb-2">
+                                        <svg class="w-8 h-8 mx-auto text-tc-accent" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M5 3h14c.6 0 1 .4 1 1v2c0 3.3-2.7 6-6 6h-.7c-.4 1.2-1.2 2.2-2.3 2.8V18h3c.6 0 1 .4 1 1v2c0 .6-.4 1-1 1H9c-.6 0-1-.4-1-1v-2c0-.6.4-1 1-1h3v-3.2c-1.1-.6-1.9-1.6-2.3-2.8H9c-3.3 0-6-2.7-6-6V4c0-.6.4-1 1-1zm1 2v1c0 2.2 1.8 4 4 4h4c2.2 0 4-1.8 4-4V5H6z"/>
+                                        </svg>
+                                    </div>
+                                    <img :src="predictedChampion.flag" alt="" class="w-6 h-4 mx-auto rounded-sm object-cover shadow mb-1.5">
+                                    <div class="champ-name text-[12px]" x-text="predictedChampion.name"></div>
+                                    <div class="text-[8px] font-black text-tc-primary/50 tracking-widest mt-1">Tu elección</div>
+
+                                    @auth
+                                    @if(!$predictionsLocked)
+                                    <div class="mt-3 pt-3 border-t border-tc-accent/40">
+                                        <div class="text-[8px] font-black text-tc-primary/60 tracking-widest mb-1">MARCADOR FINAL</div>
+                                        <div class="text-[8px] text-gray-400 mb-2">(al mejor de {{ $finalMaxSets }} sets · desempate)</div>
+
+                                        {{-- Winner row (reactive) --}}
+                                        <div class="flex flex-wrap items-center gap-1 mb-2">
+                                            <div class="flex items-center gap-1 w-full px-2 py-1 rounded bg-tc-primary text-white text-[10px] font-bold mb-1">
+                                                <img :src="predictedChampion.flag" alt="" class="w-3.5 h-2.5 rounded-sm object-cover shrink-0">
+                                                <span class="truncate" x-text="predictedChampion.name.toUpperCase()"></span>
+                                            </div>
+                                            <div class="flex gap-1 w-full justify-center">
+                                                @for($s = 0; $s < $finalMaxSets; $s++)
+                                                <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
+                                                       x-model="finalSetsWinner[{{ $s }}]"
+                                                       class="tc-score-input w-8 h-8 text-center bg-white border-2 border-tc-primary rounded text-tc-primary focus:outline-none focus:border-tc-accent focus:ring-2 focus:ring-tc-accent/40">
+                                                @endfor
+                                            </div>
+                                        </div>
+                                        {{-- Finalist row (reactive) --}}
+                                        <div class="flex flex-wrap items-center gap-1">
+                                            <div class="flex items-center gap-1 w-full px-2 py-1 rounded bg-gray-200 text-gray-700 text-[10px] font-bold mb-1">
+                                                <template x-if="predictedFinalist">
+                                                    <span class="flex items-center gap-1 w-full min-w-0">
+                                                        <img :src="predictedFinalist.flag" alt="" class="w-3.5 h-2.5 rounded-sm object-cover shrink-0">
+                                                        <span class="truncate" x-text="predictedFinalist.name.toUpperCase()"></span>
+                                                    </span>
+                                                </template>
+                                                <template x-if="!predictedFinalist">
+                                                    <span class="truncate opacity-60">Finalista (elige semifinales)</span>
+                                                </template>
+                                            </div>
+                                            <div class="flex gap-1 w-full justify-center">
+                                                @for($s = 0; $s < $finalMaxSets; $s++)
+                                                <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
+                                                       x-model="finalSetsLoser[{{ $s }}]"
+                                                       class="tc-score-input w-8 h-8 text-center bg-white border-2 border-gray-300 rounded text-gray-700 focus:outline-none focus:border-tc-accent focus:ring-2 focus:ring-tc-accent/40">
+                                                @endfor
+                                            </div>
+                                        </div>
+
+                                        <p class="mt-2 text-[9px] text-gray-500 italic leading-tight">
+                                            Se guarda junto con tu bracket.
+                                        </p>
+                                    </div>
+                                    @elseif($userFinalScore)
+                                    <div class="mt-2 inline-block px-2 py-0.5 rounded-md bg-tc-primary text-tc-accent text-[10px] font-mono font-black">{{ $userFinalScore }}</div>
+                                    @endif
+                                    @endauth
+                                </div>
+                            </template>
+                            <template x-if="!predictedChampion">
+                                <div class="text-center py-4" style="opacity:0.25;">
+                                    <svg class="w-9 h-9 mx-auto text-tc-primary" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M5 3h14c.6 0 1 .4 1 1v2c0 3.3-2.7 6-6 6h-.7c-.4 1.2-1.2 2.2-2.3 2.8V18h3c.6 0 1 .4 1 1v2c0 .6-.4 1-1 1H9c-.6 0-1-.4-1-1v-2c0-.6.4-1 1-1h3v-3.2c-1.1-.6-1.9-1.6-2.3-2.8H9c-3.3 0-6-2.7-6-6V4c0-.6.4-1 1-1zm1 2v1c0 2.2 1.8 4 4 4h4c2.2 0 4-1.8 4-4V5H6z"/>
                                     </svg>
+                                    <div class="text-[9px] font-bold text-gray-300 mt-2 uppercase tracking-wide">Por definir</div>
                                 </div>
-                                <img src="{{ $userChampion->flag_url }}" alt="" class="w-6 h-4 mx-auto rounded-sm object-cover shadow mb-1.5">
-                                <div class="champ-name text-[12px]">{{ $userChampion->name }}</div>
-                                <div class="text-[8px] font-black text-tc-primary/50 tracking-widest mt-1">Tu elección</div>
-                                @if($userFinalScore)
-                                <div class="mt-2 inline-block px-2 py-0.5 rounded-md bg-tc-primary text-tc-accent text-[10px] font-mono font-black">{{ $userFinalScore }}</div>
-                                @endif
-                            </div>
-                            @else
-                            <div class="text-center py-4" style="opacity:0.25;">
-                                <svg class="w-9 h-9 mx-auto text-tc-primary" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M5 3h14c.6 0 1 .4 1 1v2c0 3.3-2.7 6-6 6h-.7c-.4 1.2-1.2 2.2-2.3 2.8V18h3c.6 0 1 .4 1 1v2c0 .6-.4 1-1 1H9c-.6 0-1-.4-1-1v-2c0-.6.4-1 1-1h3v-3.2c-1.1-.6-1.9-1.6-2.3-2.8H9c-3.3 0-6-2.7-6-6V4c0-.6.4-1 1-1zm1 2v1c0 2.2 1.8 4 4 4h4c2.2 0 4-1.8 4-4V5H6z"/>
-                                </svg>
-                                <div class="text-[9px] font-bold text-gray-300 mt-2 uppercase tracking-wide">Por definir</div>
-                            </div>
+                            </template>
                             @endif
                         </div>
                     </div>
@@ -996,7 +1108,14 @@
                     <template x-if="!isComplete">
                         <div class="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200/60 mt-3">
                             <svg class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-                            <p class="text-xs text-amber-800 leading-relaxed">Completa todas las rondas para guardar tu bracket.</p>
+                            <p class="text-xs text-amber-800 leading-relaxed">
+                                <template x-if="!isFinalScoreValid && totalPicks >= totalRequired">
+                                    <span>Completa el <strong>marcador de la final</strong> (al menos 2 sets con ambos números) para guardar.</span>
+                                </template>
+                                <template x-if="!(totalPicks >= totalRequired)">
+                                    <span>Completa todas las rondas para guardar tu bracket.</span>
+                                </template>
+                            </p>
                         </div>
                     </template>
                     <template x-if="isComplete">
@@ -1005,18 +1124,6 @@
                             <p class="text-xs text-green-800 leading-relaxed">Bracket completo. Podrás modificarlo hasta que inicie el torneo.</p>
                         </div>
                     </template>
-                </div>
-
-                {{-- Final score tiebreaker --}}
-                <div class="px-6 py-4 border-b border-gray-100 bg-tc-accent/5">
-                    <div class="flex items-center gap-2 mb-2">
-                        <svg class="w-4 h-4 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
-                        <span class="text-xs font-bold text-tc-primary">Marcador de la final</span>
-                        <span class="text-[9px] text-gray-400 uppercase tracking-wide">(desempate)</span>
-                    </div>
-                    <input type="text" x-model="finalScore" maxlength="20" placeholder="Ej: 6-3 6-4"
-                           class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:border-tc-accent focus:ring-2 focus:ring-tc-accent/20 transition-all">
-                    <p class="text-[10px] text-gray-400 mt-1.5">Se usará para desempatar si varios usuarios terminan con los mismos puntos.</p>
                 </div>
 
                 {{-- Buttons --}}
@@ -1081,20 +1188,19 @@ function bracketApp() {
         players: @json(collect($bracketData)->flatten(1)->flatMap(fn($m) => collect([$m['player1'], $m['player2']])->filter())->unique('id')->keyBy('id')->toArray()),
         locked: {{ ($predictionsLocked || !$bracketFillable) ? 'true' : 'false' }},
         finalScore: @json($userFinalScore ?? ''),
-        requiredPicks: @json($bracketRounds->mapWithKeys(fn($r) => [
-                            $r => $matches[$r]->filter(fn($m) =>
-                                ($m->player1?->name && !preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i', $m->player1->name)) ||
-                                ($m->player2?->name && !preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i', $m->player2->name))
-                            )->count()
-                        ])->filter(fn($count) => $count > 0)->all()),
+        finalMaxSets: {{ $finalMaxSets }},
+        finalSetsWinner: Array({{ $finalMaxSets }}).fill(''),
+        finalSetsLoser:  Array({{ $finalMaxSets }}).fill(''),
+        requiredPicks: @json($requiredPicksMap),
         allRoundCounts: @json($bracketRounds->mapWithKeys(fn($r) => [
                             $r => $matches[$r]->filter(fn($m) =>
-                                ($m->player1?->name && !preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i', $m->player1->name)) ||
-                                ($m->player2?->name && !preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i', $m->player2->name))
+                                ($m->player1?->name && !preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)(\s?\d+)?$/i', $m->player1->name)) ||
+                                ($m->player2?->name && !preg_match('/^(Qf|SF|WSF|WQF|F|Ganador|TBD)(\s?\d+)?$/i', $m->player2->name))
                             )->count()
                         ])->all()),
         validPositions: @json($validPositionsMap),
         roundLabels: @json($roundLabels),
+        bracketRounds: @json($bracketRounds->values()->all()),
         showConfirm: false,
         saving: false,
         saveMsg: '',
@@ -1112,6 +1218,25 @@ function bracketApp() {
                     this.picks[round][pos] = typeof data === 'object' ? data.player_id : data;
                 }
             }
+            // Parse stored "6-3 6-4 7-5" back into the two set-by-set arrays
+            if (this.finalScore) {
+                const sets = this.finalScore.split(' ').slice(0, this.finalMaxSets);
+                sets.forEach((s, i) => {
+                    const [w, l] = s.split('-');
+                    if (w !== undefined) this.finalSetsWinner[i] = w;
+                    if (l !== undefined) this.finalSetsLoser[i]  = l;
+                });
+            }
+        },
+
+        serializeFinalScore() {
+            const parts = [];
+            for (let i = 0; i < this.finalMaxSets; i++) {
+                const w = (this.finalSetsWinner[i] ?? '').toString().trim();
+                const l = (this.finalSetsLoser[i]  ?? '').toString().trim();
+                if (w !== '' && l !== '') parts.push(w + '-' + l);
+            }
+            return parts.join(' ');
         },
 
         roundPickCount(round) {
@@ -1126,21 +1251,96 @@ function bracketApp() {
         },
 
         get totalRequired() {
-            return @json(collect($matches)->flatten()->where('status', '!=', 'bye')->count());
+            // Sum of required picks per round → must match the sum users have to make
+            return Object.values(this.requiredPicks).reduce((a, b) => a + Number(b), 0);
         },
 
         get isComplete() {
             for (const [round, needed] of Object.entries(this.requiredPicks)) {
                 if (this.roundPickCount(round) < needed) return false;
             }
+            // Also require at least 2 valid sets of the final score (best-of-3 minimum)
+            if (!this.isFinalScoreValid) return false;
             return true;
+        },
+
+        // Final score is valid when at least 2 sets are filled in with numbers
+        // on both rows, AND no partial set (one side filled, the other empty).
+        get isFinalScoreValid() {
+            let filled = 0;
+            for (let i = 0; i < this.finalMaxSets; i++) {
+                const w = (this.finalSetsWinner[i] ?? '').toString().trim();
+                const l = (this.finalSetsLoser[i]  ?? '').toString().trim();
+                if (w === '' && l === '') continue;                // empty set, ok
+                if (w === '' || l === '') return false;            // partial → invalid
+                if (!/^\d+$/.test(w) || !/^\d+$/.test(l)) return false;
+                filled++;
+            }
+            return filled >= 2;
+        },
+
+        // The user's predicted champion = pick at round F, position 1
+        get predictedChampion() {
+            const champId = this.picks['F']?.[1] ?? this.picks['F']?.['1'];
+            if (!champId) return null;
+            return this.getPlayerInfo(champId);
+        },
+
+        // The user's predicted finalist = whichever SF winner is NOT the predicted champion.
+        // We require exactly two distinct SF picks; otherwise we don't have enough info yet.
+        get predictedFinalist() {
+            const sfPicks = this.picks['SF'];
+            const champId = this.picks['F']?.[1] ?? this.picks['F']?.['1'];
+            if (!sfPicks || !champId) return null;
+
+            const sfIds = Object.values(sfPicks).filter(v => v != null).map(v => Number(v));
+            const champNum = Number(champId);
+
+            // Need both SF slots filled (2 picks) AND they must be different players.
+            if (sfIds.length < 2) return null;
+            if (sfIds[0] === sfIds[1]) return null;
+
+            const otherId = sfIds.find(id => id !== champNum);
+            if (!otherId) return null;
+            return this.getPlayerInfo(otherId);
         },
 
         pickWinner(round, position, playerId) {
             if (!playerId || this.locked) return;
             if (!this.picks[round]) this.picks[round] = {};
+
+            const previous = this.picks[round][position] || null;
             this.picks[round][position] = playerId;
+
+            // If the user changed their pick (not just selecting for the first time),
+            // invalidate any later-round picks that depended on the old player reaching
+            // the same branch. The dependent match in round R+1 is position Math.ceil(pos/2).
+            if (previous && previous !== playerId) {
+                this.invalidateDownstream(round, position, previous);
+            }
+
             this.picks = { ...this.picks };
+        },
+
+        invalidateDownstream(fromRound, fromPosition, removedPlayerId) {
+            const order = this.bracketRounds;
+            const startIdx = order.indexOf(fromRound);
+            if (startIdx < 0) return;
+
+            // Walk forward through each subsequent round, following the branch that the
+            // removed player would have occupied, and clear any pick that still references
+            // that player. Use == because picks may have been loaded from JSON as strings.
+            let pos = Math.ceil(Number(fromPosition) / 2);
+            for (let i = startIdx + 1; i < order.length; i++) {
+                const r = order[i];
+                if (this.picks[r]) {
+                    const current = this.picks[r][pos];
+                    if (current != null && current == removedPlayerId) {
+                        delete this.picks[r][pos];
+                    }
+                }
+                pos = Math.ceil(pos / 2);
+            }
         },
 
         isPickedHere(round, position, playerId) {
@@ -1162,8 +1362,18 @@ function bracketApp() {
         },
 
         async saveBracket() {
+            // Final guard: even if somehow the click reaches here, refuse to save
+            // when the bracket is incomplete (e.g. after a pick change invalidated
+            // downstream rounds).
+            if (!this.isComplete) {
+                this.saveOk = false;
+                this.saveMsg = 'Completa todos los picks antes de guardar';
+                setTimeout(() => this.saveMsg = '', 2500);
+                return;
+            }
             this.saving = true;
             this.saveMsg = '';
+            this.finalScore = this.serializeFinalScore();
             try {
                 const res = await fetch('{{ route("bracket-predictions.store", $tournament) }}', {
                     method: 'POST',
@@ -1171,7 +1381,7 @@ function bracketApp() {
                     body: JSON.stringify({ picks: this.picks, final_score: this.finalScore })
                 });
                 const data = await res.json();
-                if (data.success) { this.saveOk = true; this.locked = true; this.saveMsg = 'Bracket guardado exitosamente'; setTimeout(() => window.location.reload(), 800); }
+                if (data.success) { this.saveOk = true; this.saveMsg = 'Bracket guardado exitosamente'; setTimeout(() => window.location.reload(), 800); }
                 else { this.saveOk = false; this.saveMsg = data.message || 'Error al guardar'; }
             } catch (e) { this.saveOk = false; this.saveMsg = 'Error de conexión'; }
             this.saving = false;

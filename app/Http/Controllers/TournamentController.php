@@ -130,18 +130,27 @@ class TournamentController extends Controller
             }
         }
 
-        // Tournament ranking from bracket_predictions
+        // Tournament ranking from bracket_predictions.
+        // Manual tiebreak order (set by admin) is applied as a secondary sort:
+        // users whose points tie are ordered by the admin's manual_rank (lower = better).
         $tournamentRanking = User::select(
                 'users.id', 'users.name',
                 DB::raw('SUM(bracket_predictions.points_earned) as tournament_points'),
                 DB::raw('COUNT(bracket_predictions.id) as tournament_predictions'),
-                DB::raw('SUM(CASE WHEN bracket_predictions.is_correct = 1 THEN 1 ELSE 0 END) as correct_predictions')
+                DB::raw('SUM(CASE WHEN bracket_predictions.is_correct = 1 THEN 1 ELSE 0 END) as correct_predictions'),
+                DB::raw('COALESCE(tournament_tiebreaks.manual_rank, 9999) as manual_rank')
             )
             ->join('bracket_predictions', 'users.id', '=', 'bracket_predictions.user_id')
+            ->leftJoin('tournament_tiebreaks', function ($j) use ($tournament) {
+                $j->on('tournament_tiebreaks.user_id', '=', 'users.id')
+                  ->where('tournament_tiebreaks.tournament_id', '=', $tournament->id);
+            })
             ->where('bracket_predictions.tournament_id', $tournament->id)
-            ->groupBy('users.id', 'users.name')
+            ->groupBy('users.id', 'users.name', 'tournament_tiebreaks.manual_rank')
             ->having('tournament_points', '>', 0)
             ->orderByDesc('tournament_points')
+            ->orderBy('manual_rank')
+            ->orderBy('users.name')
             ->take(20)
             ->get();
 
@@ -193,7 +202,7 @@ class TournamentController extends Controller
         $firstRoundKey = collect($roundOrderCheck)->first(fn($r) => isset($matches[$r]));
         $bracketFillable = false;
         if ($firstRoundKey) {
-            $placeholderRe = '/^(Qf|SF|WSF|WQF|F|Ganador|TBD)\s?\d?/i';
+            $placeholderRe = '/^(Qf|SF|WSF|WQF|F|Ganador|TBD)(\s?\d+)?$/i';
             $hasReal = 0;
             $totalSlots = 0;
             foreach ($matches[$firstRoundKey] as $m) {

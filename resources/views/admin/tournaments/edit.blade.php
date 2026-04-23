@@ -3,9 +3,18 @@
 
 @section('content')
 <div class="max-w-2xl">
-    <div class="flex items-center gap-3 mb-6">
-        <a href="{{ route('admin.tournaments.index') }}" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg></a>
-        <h2 class="text-xl font-bold">Editar Torneo</h2>
+    <div class="flex items-center justify-between gap-3 mb-6">
+        <div class="flex items-center gap-3">
+            <a href="{{ route('admin.tournaments.index') }}" class="text-gray-400 hover:text-gray-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg></a>
+            <h2 class="text-xl font-bold">Editar Torneo</h2>
+        </div>
+        <a href="{{ route('admin.tournaments.tiebreaks', $tournament) }}"
+           class="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-sm transition-all">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            Desempates
+        </a>
     </div>
 
     <form action="{{ route('admin.tournaments.update', $tournament) }}" method="POST" enctype="multipart/form-data" class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-5">

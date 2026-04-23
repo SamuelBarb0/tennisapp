@@ -48,6 +48,8 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::resource('tournaments', AdminTournamentController::class)->except('show');
+    Route::get('tournaments/{tournament}/tiebreaks', [AdminTournamentController::class, 'tiebreaks'])->name('tournaments.tiebreaks');
+    Route::post('tournaments/{tournament}/tiebreaks', [AdminTournamentController::class, 'saveTiebreaks'])->name('tournaments.tiebreaks.save');
     Route::resource('players', AdminPlayerController::class)->except('show');
     Route::resource('matches', AdminMatchController::class)->except('show');
     Route::get('users', [AdminUserController::class, 'index'])->name('users.index');

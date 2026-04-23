@@ -165,7 +165,10 @@ class SimulationController extends Controller
             $isUpset = rand(1, 100) <= $upsetChance;
             $favIsP1 = $p1Rank <= $p2Rank;
 
-            $winnerId = ($isUpset xor $favIsP1) ? $match->player2_id : $match->player1_id;
+            // Without an upset, the favorite wins. The favorite is p1 when $favIsP1 is true.
+            // Table:  isUpset=F favIsP1=T → p1 ;  F/F → p2 ;  T/T → p2 ;  T/F → p1
+            // => "pick p2" when (isUpset XOR !favIsP1) is true
+            $winnerId = ($isUpset xor !$favIsP1) ? $match->player2_id : $match->player1_id;
             $winnerIsP1 = ($winnerId === $match->player1_id);
             // generateScore() returns "winner-loser" pairs. Flip each set if p2 is the winner
             // so player1's column in the view always shows player1's own sets.
