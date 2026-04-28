@@ -16,18 +16,38 @@ class TournamentController extends Controller
     public function index(Request $request)
     {
         $query = Tournament::where('is_active', true)
-            ->where('end_date', '>=', now()->subDays(7))
             ->where('start_date', '>=', '2026-01-01')
             ->whereHas('matches');
         if ($request->filled('type')) {
             $query->where('type', $request->type);
         }
-        $tournaments = $query->orderByDesc('start_date')->paginate(12);
-        return view('tournaments.index', compact('tournaments'));
+        if ($request->filled('surface')) {
+            $query->where('surface', $request->surface);
+        }
+        if ($request->filled('search')) {
+            $query->where('name', 'like', '%' . $request->search . '%');
+        }
+
+        $tournaments = $query->orderBy('start_date')->get();
+
+        // Group by month for the calendar layout
+        $tournamentsByMonth = $tournaments->groupBy(fn($t) => $t->start_date->format('Y-m'));
+
+        return view('tournaments.index', compact('tournaments', 'tournamentsByMonth'));
     }
 
-    public function show(Tournament $tournament)
+    public function show(Tournament $tournament, Request $request)
     {
+        // Optional: view another user's saved bracket (via ?user=ID query param).
+        // Falls back to the authenticated user when not provided.
+        $viewingUserId = $request->integer('user') ?: auth()->id();
+        $viewingUser = null;
+        $viewingOtherUser = false;
+        if ($viewingUserId) {
+            $viewingUser = User::find($viewingUserId);
+            $viewingOtherUser = auth()->check() && $viewingUserId !== auth()->id();
+        }
+
         // Auto-sync if stale (>10 min since last sync) and tournament is active
         if ($tournament->is_active && $tournament->status !== 'finished'
             && (!$tournament->last_synced_at || $tournament->last_synced_at->diffInMinutes(now()) >= 10)
@@ -162,13 +182,13 @@ class TournamentController extends Controller
         $predictionsLocked = !$firstMatch || now()->gte($firstMatch->scheduled_at);
         $lockDate = $firstMatch?->scheduled_at;
 
-        // User's bracket predictions for this tournament
+        // Bracket predictions for the viewing user (self or another user's, if requested)
         $userBracketPicks = collect();
         $bracketSaved = false;
         $userFinalScore = null;
-        if (auth()->check()) {
+        if ($viewingUserId) {
             $userBracketPicks = BracketPrediction::where('tournament_id', $tournament->id)
-                ->where('user_id', auth()->id())
+                ->where('user_id', $viewingUserId)
                 ->get()
                 ->groupBy('round')
                 ->map(fn($items) => $items->keyBy('position'));
@@ -176,17 +196,17 @@ class TournamentController extends Controller
 
             // Final score prediction (stored on the F/position=1 row)
             $finalPrediction = BracketPrediction::where('tournament_id', $tournament->id)
-                ->where('user_id', auth()->id())
+                ->where('user_id', $viewingUserId)
                 ->where('round', 'F')
                 ->where('position', 1)
                 ->first();
             $userFinalScore = $finalPrediction?->final_score_prediction;
         }
 
-        // Points earned per round by current user (for header display)
+        // Points earned per round (for the viewing user)
         $userRoundPoints = [];
         $userTotalPoints = 0;
-        if (auth()->check() && $bracketSaved) {
+        if ($viewingUserId && $bracketSaved) {
             foreach ($userBracketPicks as $round => $positions) {
                 $roundTotal = 0;
                 foreach ($positions as $pred) {
@@ -259,10 +279,19 @@ class TournamentController extends Controller
             }
         }
 
+        // Paywall: only block when viewing OWN bracket and the tournament is paid.
+        // Admins always pass through (so they can simulate/test).
+        $hasPaid = $tournament->hasUserPaid(auth()->id());
+        $needsPayment = !$viewingOtherUser
+            && $tournament->requiresPayment()
+            && !$hasPaid
+            && !(auth()->check() && auth()->user()->is_admin);
+
         return view('tournaments.show', compact(
             'tournament', 'matches', 'tournamentRanking',
             'predictionsLocked', 'lockDate', 'bracketData', 'userPicksJs', 'bracketSaved',
-            'bracketFillable', 'userFinalScore', 'userRoundPoints', 'userTotalPoints'
+            'bracketFillable', 'userFinalScore', 'userRoundPoints', 'userTotalPoints',
+            'viewingUser', 'viewingOtherUser', 'needsPayment', 'hasPaid'
         ));
     }
 

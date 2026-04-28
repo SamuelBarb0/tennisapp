@@ -464,11 +464,107 @@
 
 <div class="bg-gradient-to-b from-gray-50 to-gray-100/60 min-h-[60vh]">
 
-    @if($bracketRounds->count() > 0)
+    @if($needsPayment ?? false)
+    {{-- ═══════ PAYWALL ═══════ --}}
+    <div class="max-w-2xl mx-auto px-4 sm:px-6 py-12">
+        <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
+            {{-- Header --}}
+            <div class="bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark px-8 py-10 text-center text-white relative overflow-hidden">
+                <div class="absolute -top-12 -right-12 w-44 h-44 rounded-full border-[24px] border-white/10"></div>
+                <div class="absolute -bottom-10 -left-10 w-36 h-36 rounded-full border-[20px] border-white/10"></div>
+                <div class="relative">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-tc-accent/20 border border-tc-accent/30 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-tc-accent" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-2xl font-black tracking-tight">Torneo Premium</h2>
+                    <p class="text-white/70 text-sm mt-2 max-w-xs mx-auto">Desbloquea las predicciones de <strong class="text-tc-accent">{{ $tournament->name }}</strong> con un único pago.</p>
+                </div>
+            </div>
+
+            {{-- Pricing --}}
+            <div class="px-8 py-8 text-center border-b border-gray-100">
+                <div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Acceso completo</div>
+                <div class="flex items-baseline justify-center gap-1">
+                    <span class="text-5xl font-black text-tc-primary tabular-nums">${{ number_format($tournament->price, 0, ',', '.') }}</span>
+                    <span class="text-lg font-bold text-gray-400">COP</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Pago único · Acceso indefinido</p>
+            </div>
+
+            {{-- Benefits --}}
+            <div class="px-8 py-6 space-y-3">
+                @foreach([
+                    'Llena tu bracket completo del torneo',
+                    'Compite en el ranking del torneo',
+                    'Predice el marcador de la final (desempate)',
+                    'Sigue tus puntos en tiempo real',
+                ] as $perk)
+                <div class="flex items-center gap-3">
+                    <div class="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                        <svg class="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                    </div>
+                    <span class="text-sm text-gray-700">{{ $perk }}</span>
+                </div>
+                @endforeach
+            </div>
+
+            {{-- CTA --}}
+            <div class="px-8 pb-8">
+                @auth
+                <form method="POST" action="{{ route('payments.tournaments.checkout', $tournament) }}">
+                    @csrf
+                    <button type="submit"
+                            class="w-full px-6 py-4 bg-tc-accent text-tc-primary-dark rounded-xl font-black text-base hover:brightness-110 transition shadow-lg flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>
+                        Pagar con Mercado Pago
+                    </button>
+                </form>
+                <p class="text-[11px] text-gray-400 text-center mt-3">Pago seguro procesado por Mercado Pago. Soporta tarjeta, PSE, Nequi y más.</p>
+                @else
+                <a href="{{ route('login') }}" class="block w-full px-6 py-4 bg-tc-accent text-tc-primary-dark rounded-xl font-black text-base hover:brightness-110 transition shadow-lg text-center">
+                    Inicia sesión para pagar
+                </a>
+                @endauth
+            </div>
+        </div>
+
+        {{-- Back link --}}
+        <div class="text-center mt-4">
+            <a href="{{ route('tournaments.index') }}" class="text-sm text-gray-400 hover:text-tc-primary transition">
+                ← Volver al calendario
+            </a>
+        </div>
+    </div>
+    @elseif($bracketRounds->count() > 0)
     <div x-data="bracketApp()" x-init="init()">
 
-        {{-- Action bar --}}
+        {{-- "Viewing another user's bracket" notice --}}
+        @if($viewingOtherUser && $viewingUser)
+        <div class="bg-tc-primary text-white">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-7 h-7 rounded-full bg-tc-accent text-tc-primary flex items-center justify-center font-black text-xs shrink-0">
+                        {{ strtoupper(substr($viewingUser->name, 0, 1)) }}
+                    </div>
+                    <div class="text-sm">
+                        Viendo el bracket de
+                        <strong class="text-tc-accent">{{ $viewingUser->name }}</strong>
+                        <span class="text-white/50 hidden sm:inline ml-2">— solo lectura</span>
+                    </div>
+                </div>
+                <a href="{{ route('tournaments.show', $tournament) }}"
+                   class="text-xs font-bold px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition border border-white/20 shrink-0">
+                    Volver a mi bracket
+                </a>
+            </div>
+        </div>
+        @endif
+
+        {{-- Action bar (only when viewing own bracket) --}}
         @auth
+        @if(!$viewingOtherUser)
         @if($predictionsLocked && $bracketSaved)
         <div class="bar-saved">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center gap-3">
@@ -515,6 +611,7 @@
             </div>
         </div>
         @endif
+        @endif {{-- close !$viewingOtherUser --}}
         @endauth
 
         {{-- ═══════ PANEL SIMULADOR (solo admins) ═══════ --}}
@@ -605,6 +702,11 @@
                     @php
                         $isLast = $bri === $bracketRounds->count() - 1;
                         $roundEarned = ($userRoundPoints[$round] ?? 0);
+                        // Show the points badge once the round has at least one finished match
+                        // — this way "+0 PTS" appears on rounds the user got wrong instead of
+                        // being hidden entirely.
+                        $roundHasResults = isset($matches[$round])
+                            && $matches[$round]->where('status', 'finished')->isNotEmpty();
                     @endphp
                     <div style="width: 220px;" class="px-1">
                         <div class="round-col-header {{ $isLast ? 'is-final' : '' }}">
@@ -613,8 +715,8 @@
                             <span class="rpts">{{ $roundPointsMap[$round] }} pts c/u</span>
                             @endif
                             @auth
-                            @if($bracketSaved && $roundEarned > 0)
-                            <span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[9px] font-black tabular-nums">
+                            @if($bracketSaved && $roundHasResults)
+                            <span class="inline-block mt-1 px-2 py-0.5 rounded-full {{ $roundEarned > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }} text-[9px] font-black tabular-nums">
                                 +{{ $roundEarned }} PTS
                             </span>
                             @endif
@@ -1186,7 +1288,7 @@ function bracketApp() {
     return {
         picks: @json($userPicksJs ?? []),
         players: @json(collect($bracketData)->flatten(1)->flatMap(fn($m) => collect([$m['player1'], $m['player2']])->filter())->unique('id')->keyBy('id')->toArray()),
-        locked: {{ ($predictionsLocked || !$bracketFillable) ? 'true' : 'false' }},
+        locked: {{ ($predictionsLocked || !$bracketFillable || $viewingOtherUser) ? 'true' : 'false' }},
         finalScore: @json($userFinalScore ?? ''),
         finalMaxSets: {{ $finalMaxSets }},
         finalSetsWinner: Array({{ $finalMaxSets }}).fill(''),

@@ -248,24 +248,24 @@
                 @endif
 
                 {{-- Rankings Table --}}
-                <div>
+                <div x-data="{ showRest: false }">
                     {{-- Table header --}}
                     <div class="flex items-center gap-2 px-4 py-2 bg-gray-50/60 border-y border-gray-100 text-[9px] font-bold uppercase tracking-widest text-gray-400">
                         <div class="w-6 text-center">#</div>
                         <div class="flex-1">Jugador</div>
                         <div class="w-14 text-right">Pts</div>
+                        <div class="w-6 text-center"></div>
                     </div>
 
-                    {{-- Rows --}}
+                    {{-- Top 10 rows --}}
                     @foreach($top10 as $i => $ru)
                     @php
                         $rank = $i + 1;
                         $isMe = auth()->check() && auth()->id() == $ru->id;
                         $accuracy = $ru->total_predictions > 0 ? round(($ru->correct_predictions / $ru->total_predictions) * 100) : 0;
-                        $accColor = $accuracy >= 60 ? 'bg-green-500' : ($accuracy >= 40 ? 'bg-tc-accent' : 'bg-orange-400');
                     @endphp
-                    <div class="rank-row flex items-center gap-2 px-4 py-2 {{ $isMe ? 'is-me' : '' }} {{ $rank % 2 === 0 ? 'bg-gray-50/30' : '' }} border-b border-gray-50 last:border-b-0">
-                        {{-- Rank badge --}}
+                    <a href="{{ route('tournaments.show', ['tournament' => $tournament, 'user' => $ru->id]) }}"
+                       class="rank-row flex items-center gap-2 px-4 py-2 {{ $isMe ? 'is-me' : '' }} {{ $rank % 2 === 0 ? 'bg-gray-50/30' : '' }} border-b border-gray-50 last:border-b-0 group">
                         <div class="w-6 text-center shrink-0">
                             @if($rank === 1)
                                 <div class="w-5 h-5 mx-auto rounded bg-gradient-to-br from-tc-accent to-yellow-500 flex items-center justify-center">
@@ -283,36 +283,31 @@
                                 <span class="text-[10px] font-bold text-gray-400 font-mono">{{ $rank }}</span>
                             @endif
                         </div>
-
-                        {{-- Avatar --}}
                         <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0
                             {{ $isMe ? 'bg-tc-primary text-white ring-1 ring-tc-accent/40' : 'bg-gray-100 text-gray-500' }}">
                             {{ strtoupper(substr($ru->name, 0, 1)) }}
                         </div>
-
-                        {{-- Name --}}
                         <div class="flex-1 min-w-0">
                             <div class="text-xs font-semibold text-gray-800 truncate">
                                 {{ $ru->name }}
                                 @if($isMe)<span class="ml-1 px-1 py-0.5 rounded bg-tc-primary/10 text-tc-primary text-[8px] font-bold">TÚ</span>@endif
                             </div>
-                            <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $accuracy }}%</div>
+                            <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $accuracy }}% aciertos</div>
                         </div>
-
-                        {{-- Points --}}
                         <div class="w-14 text-right shrink-0">
                             <div class="text-xs font-black text-tc-primary tabular-nums font-mono">{{ number_format($ru->tournament_points) }}</div>
                         </div>
-                    </div>
+                        <div class="w-6 text-center shrink-0 text-gray-300 group-hover:text-tc-primary transition" title="Ver bracket de {{ $ru->name }}">
+                            <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                    </a>
                     @endforeach
 
                     {{-- Current user outside top 10 --}}
                     @if($currentUser)
                     @php
                         $myAccuracy = $currentUser->total_predictions > 0 ? round(($currentUser->correct_predictions / $currentUser->total_predictions) * 100) : 0;
-                        $myAccColor = $myAccuracy >= 60 ? 'bg-green-500' : ($myAccuracy >= 40 ? 'bg-tc-accent' : 'bg-orange-400');
                     @endphp
-                    {{-- Ellipsis separator --}}
                     <div class="flex items-center gap-3 px-6 py-1">
                         <div class="flex-1 border-t border-dashed border-gray-200"></div>
                         <div class="flex gap-1">
@@ -322,8 +317,8 @@
                         </div>
                         <div class="flex-1 border-t border-dashed border-gray-200"></div>
                     </div>
-                    {{-- User row --}}
-                    <div class="rank-row is-me flex items-center gap-2 px-4 py-2 border-l-[3px] border-l-tc-accent">
+                    <a href="{{ route('tournaments.show', $tournament) }}"
+                       class="rank-row is-me flex items-center gap-2 px-4 py-2 border-l-[3px] border-l-tc-accent group">
                         <div class="w-6 text-center shrink-0">
                             <span class="text-[10px] font-black text-tc-primary font-mono">{{ $currentUser->position }}</span>
                         </div>
@@ -335,16 +330,59 @@
                                 {{ $currentUser->name }}
                                 <span class="ml-1 px-1 py-0.5 rounded bg-tc-primary/10 text-tc-primary text-[8px] font-bold">TÚ</span>
                             </div>
-                            <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $myAccuracy }}%</div>
+                            <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $myAccuracy }}% aciertos</div>
                         </div>
                         <div class="w-14 text-right shrink-0">
                             <div class="text-xs font-black text-tc-primary tabular-nums font-mono">{{ number_format($currentUser->tournament_points) }}</div>
                         </div>
+                        <div class="w-6 text-center shrink-0 text-gray-300 group-hover:text-tc-primary transition">
+                            <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </div>
+                    </a>
+                    @endif
+
+                    {{-- Expand/collapse the rest of the ranking --}}
+                    @if($tr['rest']->count() > 0)
+                    <button type="button" x-on:click="showRest = !showRest"
+                            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-tc-primary text-[11px] font-bold hover:bg-gray-100 transition-colors">
+                        <span x-show="!showRest">Ver los {{ $tr['rest']->count() }} usuarios restantes</span>
+                        <span x-show="showRest">Ocultar</span>
+                        <svg class="w-3.5 h-3.5 transition-transform" :class="showRest && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                    <div x-show="showRest" x-collapse>
+                        @foreach($tr['rest'] as $ru)
+                        @php
+                            $isMe = auth()->check() && auth()->id() == $ru->id;
+                            $accuracy = $ru->total_predictions > 0 ? round(($ru->correct_predictions / $ru->total_predictions) * 100) : 0;
+                        @endphp
+                        <a href="{{ route('tournaments.show', ['tournament' => $tournament, 'user' => $ru->id]) }}"
+                           class="rank-row flex items-center gap-2 px-4 py-2 {{ $isMe ? 'is-me' : '' }} border-b border-gray-50 last:border-b-0 group">
+                            <div class="w-6 text-center shrink-0">
+                                <span class="text-[10px] font-bold text-gray-400 font-mono">{{ $ru->position }}</span>
+                            </div>
+                            <div class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 {{ $isMe ? 'bg-tc-primary text-white' : 'bg-gray-100 text-gray-500' }}">
+                                {{ strtoupper(substr($ru->name, 0, 1)) }}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-xs font-semibold text-gray-800 truncate">
+                                    {{ $ru->name }}
+                                    @if($isMe)<span class="ml-1 px-1 py-0.5 rounded bg-tc-primary/10 text-tc-primary text-[8px] font-bold">TÚ</span>@endif
+                                </div>
+                                <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $accuracy }}% aciertos</div>
+                            </div>
+                            <div class="w-14 text-right shrink-0">
+                                <div class="text-xs font-black text-tc-primary tabular-nums font-mono">{{ number_format($ru->tournament_points) }}</div>
+                            </div>
+                            <div class="w-6 text-center shrink-0 text-gray-300 group-hover:text-tc-primary transition">
+                                <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                            </div>
+                        </a>
+                        @endforeach
                     </div>
                     @endif
                 </div>
 
-                {{-- Mobile bracket link --}}
+                {{-- Bottom CTA --}}
                 <a href="{{ route('tournaments.show', $tournament) }}" class="flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-tc-primary text-[11px] font-bold hover:bg-gray-100 transition-colors">
                     Ver bracket del torneo
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>

@@ -27,7 +27,9 @@ class BannerController extends Controller
             'link' => 'nullable|string',
             'is_active' => 'boolean',
             'order' => 'integer',
-            'image' => 'nullable|image|max:2048',
+            'media_type' => 'required|in:image,video',
+            'media_url' => 'nullable|url',
+            'image' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,mp4,webm|max:20480',
         ]);
         $data['is_active'] = $request->boolean('is_active');
         if ($request->hasFile('image')) {
@@ -50,7 +52,9 @@ class BannerController extends Controller
             'link' => 'nullable|string',
             'is_active' => 'boolean',
             'order' => 'integer',
-            'image' => 'nullable|image|max:2048',
+            'media_type' => 'required|in:image,video',
+            'media_url' => 'nullable|url',
+            'image' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,mp4,webm|max:20480',
         ]);
         $data['is_active'] = $request->boolean('is_active');
         if ($request->hasFile('image')) {

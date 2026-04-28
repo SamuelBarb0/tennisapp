@@ -2,6 +2,78 @@
 @section('title', 'Inicio')
 
 @section('content')
+
+{{-- ========== CARRUSEL DE BANNERS (1-3) ========== --}}
+@if($banners->count() > 0)
+<section class="bg-tc-primary"
+         x-data="{
+            current: 0,
+            count: {{ $banners->count() }},
+            autoTimer: null,
+            init() {
+                if (this.count > 1) this.autoTimer = setInterval(() => this.next(), 6000);
+            },
+            next() { this.current = (this.current + 1) % this.count; },
+            prev() { this.current = (this.current - 1 + this.count) % this.count; },
+            go(i)  { this.current = i; }
+         }">
+    <div class="relative max-w-7xl mx-auto">
+        <div class="relative overflow-hidden" style="aspect-ratio: 21/6; max-height:240px;">
+            @foreach($banners as $i => $banner)
+            <div x-show="current === {{ $i }}"
+                 x-transition:enter="transition ease-out duration-500"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 class="absolute inset-0">
+                @php $src = $banner->media_src; @endphp
+                @if($banner->link)<a href="{{ $banner->link }}" class="block h-full w-full">@endif
+                @if($banner->media_type === 'video' && $src)
+                    <video src="{{ $src }}" autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover"></video>
+                @elseif($src)
+                    <img src="{{ $src }}" alt="{{ $banner->title }}" class="absolute inset-0 w-full h-full object-cover">
+                @else
+                    {{-- Decorative gradient when no media uploaded yet --}}
+                    <div class="absolute inset-0 bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark"></div>
+                @endif
+                {{-- overlay con texto si hay título/subtítulo --}}
+                @if($banner->title || $banner->subtitle)
+                <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent flex items-center">
+                    <div class="px-6 sm:px-12 md:px-20 max-w-2xl">
+                        @if($banner->title)
+                        <h2 class="text-2xl md:text-4xl font-black text-white tracking-tight mb-1 drop-shadow-lg">{{ $banner->title }}</h2>
+                        @endif
+                        @if($banner->subtitle)
+                        <p class="text-sm md:text-base text-white/90 drop-shadow">{{ $banner->subtitle }}</p>
+                        @endif
+                    </div>
+                </div>
+                @endif
+                @if($banner->link)</a>@endif
+            </div>
+            @endforeach
+        </div>
+
+        @if($banners->count() > 1)
+        {{-- Arrows --}}
+        <button x-on:click="prev()" class="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <button x-on:click="next()" class="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+        </button>
+        {{-- Dots --}}
+        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+            @foreach($banners as $i => $banner)
+            <button x-on:click="go({{ $i }})"
+                    :class="current === {{ $i }} ? 'bg-tc-accent w-8' : 'bg-white/50 w-2'"
+                    class="h-2 rounded-full transition-all"></button>
+            @endforeach
+        </div>
+        @endif
+    </div>
+</section>
+@endif
+
 {{-- Hero Section --}}
 <section class="relative bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark overflow-hidden">
     {{-- Orbes decorativos --}}
@@ -55,51 +127,94 @@
     </div>
 </section>
 
-{{-- ========== PRÓXIMO TORNEO PARA PREDECIR (Protagonista) ========== --}}
-@if($nextTournament)
-<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-10 reveal">
-    <div class="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-        <div class="md:flex">
-            {{-- Lado izquierdo: info del torneo --}}
-            <div class="md:w-1/2 p-6 md:p-8">
-                <div class="flex items-center gap-3 mb-4">
-                    <span class="px-3 py-1 bg-tc-accent text-tc-primary-dark text-xs font-bold rounded-full">PRÓXIMO PARA PREDECIR</span>
-                    @if($nextTournament->is_premium)
-                        <span class="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-bold rounded-full">PREMIUM</span>
+{{-- ========== PRÓXIMOS TORNEOS A PREDECIR (configurable por admin) ========== --}}
+@if($featuredTournaments->count() > 0)
+<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10 reveal">
+    <div class="text-center mb-8">
+        <h2 class="text-2xl md:text-3xl font-black tracking-tight uppercase text-tc-primary">Próximos Torneos a Predecir</h2>
+        <p class="text-sm text-gray-500 mt-1">Los torneos seleccionados por el administrador para esta temporada</p>
+    </div>
+
+    <div class="grid grid-cols-1 {{ $featuredTournaments->count() > 1 ? 'md:grid-cols-2' : '' }} gap-6">
+        @foreach($featuredTournaments as $ft)
+        @php $state = $ft->bracket_state; @endphp
+        <div class="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
+            <div class="md:flex h-full">
+                {{-- Lado izquierdo: info del torneo --}}
+                <div class="md:w-1/2 p-6 md:p-8 flex flex-col">
+                    <div class="flex items-center gap-2 mb-4 flex-wrap">
+                        @if($state === 'live')
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">
+                                <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>EN VIVO
+                            </span>
+                        @elseif($state === 'open')
+                            <span class="px-3 py-1 bg-tc-accent text-tc-primary-dark text-xs font-bold rounded-full">PRÓXIMO PARA PREDECIR</span>
+                        @else
+                            <span class="px-3 py-1 bg-gray-200 text-gray-600 text-xs font-bold rounded-full">PRÓXIMAMENTE</span>
+                        @endif
+                        @if($ft->requiresPayment())
+                            <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded-full">${{ number_format($ft->price, 0, ',', '.') }} COP</span>
+                        @else
+                            <span class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">GRATIS</span>
+                        @endif
+                    </div>
+                    <h2 class="text-2xl md:text-3xl font-bold mb-2">{{ $ft->name }}</h2>
+                    @if($ft->city || $ft->country)
+                    <p class="text-gray-500 flex items-center gap-1 mb-3">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        {{ $ft->city }}{{ $ft->country ? ', ' . $ft->country : '' }}
+                    </p>
+                    @endif
+                    <div class="flex flex-wrap gap-3 mb-5">
+                        <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $ft->start_date->format('d M') }} - {{ $ft->end_date->format('d M, Y') }}</span>
+                        @if($ft->surface)
+                        <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $ft->surface }}</span>
+                        @endif
+                    </div>
+                    @if($state === 'open')
+                    <div class="flex items-center gap-2 text-sm text-gray-500 mb-6">
+                        <svg class="w-5 h-5 text-tc-accent" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+                        <span><strong>{{ $ft->pending_matches_count }}</strong> partidos disponibles para predecir</span>
+                    </div>
+                    @endif
+                    <div class="mt-auto pt-2">
+                        @if($state === 'live')
+                            <a href="{{ route('tournaments.show', $ft) }}" class="inline-flex items-center gap-2 px-6 py-3 bg-red-500 text-white rounded-full font-semibold hover:bg-red-600 transition-all shadow-md">
+                                Torneo en vivo
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                            </a>
+                            <p class="text-xs text-gray-400 mt-2">Predicciones finalizadas — revisa tu bracket guardado</p>
+                        @elseif($state === 'open')
+                            <a href="{{ route('tournaments.show', $ft) }}" class="inline-flex items-center gap-2 px-6 py-3 bg-tc-primary text-white rounded-full font-semibold hover:bg-tc-primary-hover transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5">
+                                Predecir ahora
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                            </a>
+                        @else
+                            <button disabled class="inline-flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-400 rounded-full font-semibold cursor-not-allowed">
+                                Predicciones próximamente
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                            </button>
+                        @endif
+                    </div>
+                </div>
+                {{-- Lado derecho: imagen del torneo (con fallback al gradiente por tipo) --}}
+                <div class="md:w-1/2 relative min-h-[200px] flex items-center justify-center overflow-hidden bg-gradient-to-br {{ $ft->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($ft->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }}">
+                    @if($ft->image)
+                        <img src="{{ asset('storage/' . $ft->image) }}" alt="{{ $ft->name }}" class="absolute inset-0 w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+                        <div class="relative text-white text-center px-6 self-end pb-6 w-full">
+                            <span class="inline-block px-3 py-1 rounded-full bg-white/20 backdrop-blur text-[10px] font-bold uppercase tracking-widest">{{ $ft->type }}</span>
+                        </div>
                     @else
-                        <span class="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">GRATIS</span>
+                        <div class="text-center text-white">
+                            <span class="text-white/30 text-9xl font-black block leading-none">{{ substr($ft->type, 0, 1) }}</span>
+                            <span class="text-white/80 text-lg font-semibold mt-2 block">{{ $ft->type }}</span>
+                        </div>
                     @endif
-                </div>
-                <h2 class="text-2xl md:text-3xl font-bold mb-2">{{ $nextTournament->name }}</h2>
-                @if($nextTournament->city || $nextTournament->country)
-                <p class="text-gray-500 flex items-center gap-1 mb-3">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    {{ $nextTournament->city }}{{ $nextTournament->country ? ', ' . $nextTournament->country : '' }}
-                </p>
-                @endif
-                <div class="flex flex-wrap gap-3 mb-5">
-                    <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $nextTournament->start_date->format('d M') }} - {{ $nextTournament->end_date->format('d M, Y') }}</span>
-                    @if($nextTournament->surface)
-                    <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $nextTournament->surface }}</span>
-                    @endif
-                </div>
-                <div class="flex items-center gap-2 text-sm text-gray-500 mb-6">
-                    <svg class="w-5 h-5 text-tc-accent" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
-                    <span><strong>{{ $nextTournament->pending_matches_count }}</strong> partidos disponibles para predecir</span>
-                </div>
-                <a href="{{ route('tournaments.show', $nextTournament) }}" class="inline-flex items-center gap-2 px-6 py-3 bg-tc-primary text-white rounded-full font-semibold hover:bg-tc-primary-hover transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5">
-                    Predecir ahora
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                </a>
-            </div>
-            {{-- Lado derecho: visual del torneo --}}
-            <div class="md:w-1/2 bg-gradient-to-br {{ $nextTournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($nextTournament->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center p-8 min-h-[200px]">
-                <div class="text-center text-white">
-                    <span class="text-white/30 text-9xl font-black block leading-none">{{ substr($nextTournament->type, 0, 1) }}</span>
-                    <span class="text-white/80 text-lg font-semibold mt-2 block">{{ $nextTournament->type }}</span>
                 </div>
             </div>
         </div>
+        @endforeach
     </div>
 </section>
 @endif
@@ -161,12 +276,19 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         @foreach($upcomingTournaments as $tournament)
         <a href="{{ route('tournaments.show', $tournament) }}" class="group block bg-white rounded-3xl overflow-hidden shadow-sm hover-lift border border-gray-100 reveal-scale" data-delay="{{ $loop->index * 80 }}">
-            <div class="h-32 bg-gradient-to-br {{ $tournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($tournament->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center relative">
-                <span class="text-white/20 text-7xl font-black">{{ substr($tournament->type, 0, 1) }}</span>
-                @if($tournament->is_premium)
-                    <span class="absolute top-3 right-3 px-2.5 py-0.5 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full">PREMIUM</span>
+            <div class="h-32 relative overflow-hidden bg-gradient-to-br {{ $tournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($tournament->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }}">
+                @if($tournament->image)
+                    <img src="{{ asset('storage/' . $tournament->image) }}" alt="{{ $tournament->name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
                 @else
-                    <span class="absolute top-3 right-3 px-2.5 py-0.5 bg-green-400 text-green-900 text-xs font-bold rounded-full">GRATIS</span>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <span class="text-white/20 text-7xl font-black">{{ substr($tournament->type, 0, 1) }}</span>
+                    </div>
+                @endif
+                @if($tournament->requiresPayment())
+                    <span class="absolute top-3 right-3 px-2.5 py-0.5 bg-yellow-400 text-yellow-900 text-xs font-bold rounded-full z-10 shadow">${{ number_format($tournament->price, 0, ',', '.') }} COP</span>
+                @else
+                    <span class="absolute top-3 right-3 px-2.5 py-0.5 bg-green-400 text-green-900 text-xs font-bold rounded-full z-10">GRATIS</span>
                 @endif
             </div>
             <div class="p-5">

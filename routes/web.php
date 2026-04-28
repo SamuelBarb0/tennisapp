@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\TournamentController;
 use App\Http\Controllers\PredictionController;
 use App\Http\Controllers\RankingController;
@@ -29,8 +30,15 @@ Route::get('/rankings', [RankingController::class, 'index'])->name('rankings.ind
 Route::get('/prizes', [PrizeController::class, 'index'])->name('prizes.index');
 Route::get('/rules', [RulesController::class, 'index'])->name('rules');
 
+// Mercado Pago — webhook is public (CSRF is excluded in bootstrap/app.php)
+Route::post('/payments/mp/webhook', [PaymentController::class, 'webhook'])->name('payments.mp.webhook');
+Route::get('/payments/mp/return', [PaymentController::class, 'returnFromMp'])->name('payments.mp.return');
+
 // Authenticated routes
 Route::middleware('auth')->group(function () {
+    Route::post('/payments/tournaments/{tournament}/checkout', [PaymentController::class, 'checkout'])
+        ->name('payments.tournaments.checkout');
+
     Route::get('/tournaments/{tournament:slug}/predict', [TournamentController::class, 'predict'])->name('tournaments.predict');
     Route::post('/predictions', [PredictionController::class, 'store'])->name('predictions.store');
     Route::post('/predictions/debug-resolve', [PredictionController::class, 'debugResolve'])->name('predictions.debug-resolve');

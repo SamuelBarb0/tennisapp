@@ -37,10 +37,13 @@ class TournamentController extends Controller
             'end_date' => 'required|date|after:start_date',
             'is_premium' => 'boolean',
             'is_active' => 'boolean',
+            'featured_on_home' => 'boolean',
+            'price' => 'nullable|numeric|min:0',
             'image' => 'nullable|image|max:2048',
         ]);
         $data['is_premium'] = $request->boolean('is_premium');
         $data['is_active'] = $request->boolean('is_active');
+        $data['featured_on_home'] = $request->boolean('featured_on_home');
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('tournaments', 'public');
         }
@@ -81,10 +84,13 @@ class TournamentController extends Controller
             'end_date' => 'required|date|after:start_date',
             'is_premium' => 'boolean',
             'is_active' => 'boolean',
+            'featured_on_home' => 'boolean',
+            'price' => 'nullable|numeric|min:0',
             'image' => 'nullable|image|max:2048',
         ]);
         $data['is_premium'] = $request->boolean('is_premium');
         $data['is_active'] = $request->boolean('is_active');
+        $data['featured_on_home'] = $request->boolean('featured_on_home');
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('tournaments', 'public');
         }

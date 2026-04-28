@@ -14,20 +14,39 @@ class HomeController extends Controller
 {
     public function index()
     {
-        $banners = Banner::active()->get();
+        // Limit to 3 active banners (carousel cap)
+        $banners = Banner::active()->take(3)->get();
 
-        // Próximo torneo para predecir (el más cercano con partidos pendientes)
-        $nextTournament = Tournament::where('is_active', true)
-            ->where('start_date', '>=', '2026-01-01')
+        // "Próximos torneos a predecir": the admin opts in via featured_on_home.
+        // If admin hasn't featured anything yet, fall back to the nearest upcoming
+        // tournament so the page never looks empty.
+        $featuredTournaments = Tournament::where('is_active', true)
+            ->where('featured_on_home', true)
             ->whereHas('matches')
             ->withCount(['matches as pending_matches_count' => function ($q) {
                 $q->where('status', 'pending');
             }])
-            ->having('pending_matches_count', '>', 0)
             ->orderBy('start_date')
-            ->first();
+            ->get();
 
-        // Próximos torneos (con partidos, excluyendo el principal)
+        if ($featuredTournaments->isEmpty()) {
+            $featuredTournaments = Tournament::where('is_active', true)
+                ->where('start_date', '>=', '2026-01-01')
+                ->whereHas('matches')
+                ->withCount(['matches as pending_matches_count' => function ($q) {
+                    $q->where('status', 'pending');
+                }])
+                ->having('pending_matches_count', '>', 0)
+                ->orderBy('start_date')
+                ->take(2)
+                ->get();
+        }
+
+        // Backwards-compat for sections still expecting nextTournament
+        $nextTournament = $featuredTournaments->first();
+
+        // Próximos torneos (con partidos, excluyendo los destacados)
+        $featuredIds = $featuredTournaments->pluck('id')->all();
         $upcomingTournaments = Tournament::where('is_active', true)
             ->where('start_date', '>=', '2026-01-01')
             ->where('end_date', '>=', now()->subDays(7))
@@ -35,9 +54,7 @@ class HomeController extends Controller
             ->withCount(['matches as pending_matches_count' => function ($q) {
                 $q->where('status', 'pending');
             }])
-            ->when($nextTournament, function ($q) use ($nextTournament) {
-                $q->where('id', '!=', $nextTournament->id);
-            })
+            ->when(!empty($featuredIds), fn($q) => $q->whereNotIn('id', $featuredIds))
             ->orderBy('start_date')
             ->take(6)
             ->get();
@@ -101,7 +118,7 @@ class HomeController extends Controller
         ];
 
         return view('home', compact(
-            'banners', 'nextTournament', 'upcomingTournaments',
+            'banners', 'featuredTournaments', 'nextTournament', 'upcomingTournaments',
             'liveTournament', 'recentResults', 'tournamentRankings', 'stats'
         ));
     }

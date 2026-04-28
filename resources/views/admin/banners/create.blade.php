@@ -32,10 +32,24 @@
                 @error('order') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1.5">Imagen</label>
-                <input type="file" name="image" accept="image/*" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-tc-primary file:text-white">
-                @error('image') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Tipo de medio</label>
+                <select name="media_type" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+                    <option value="image" {{ old('media_type') === 'image' ? 'selected' : '' }}>Imagen</option>
+                    <option value="video" {{ old('media_type') === 'video' ? 'selected' : '' }}>Video</option>
+                </select>
+                @error('media_type') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Archivo (imagen o video MP4/WebM, máx 20MB)</label>
+            <input type="file" name="image" accept="image/*,video/mp4,video/webm" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-tc-primary file:text-white">
+            @error('image') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">URL externa (opcional)</label>
+            <input type="url" name="media_url" value="{{ old('media_url') }}" placeholder="https://..." class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+            <p class="text-[11px] text-gray-400 mt-1">Si se llena, se usa esta URL en lugar del archivo subido.</p>
+            @error('media_url') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
         </div>
         <div>
             <label class="flex items-center gap-2 cursor-pointer">

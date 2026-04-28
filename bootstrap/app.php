@@ -14,6 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
         ]);
+
+        // Mercado Pago IPN can't carry our CSRF token
+        $middleware->validateCsrfTokens(except: [
+            'payments/mp/webhook',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

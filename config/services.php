@@ -40,4 +40,11 @@ return [
         'base_url' => env('SPORTRADAR_BASE_URL', 'https://api.sportradar.com/tennis/production/v3/en/'),
     ],
 
+    'mercadopago' => [
+        'public_key'   => env('MERCADOPAGO_PUBLIC_KEY'),
+        'access_token' => env('MERCADOPAGO_ACCESS_TOKEN'),
+        'webhook_secret' => env('MERCADOPAGO_WEBHOOK_SECRET'),
+        'currency'     => env('MERCADOPAGO_CURRENCY', 'COP'),
+    ],
+
 ];
