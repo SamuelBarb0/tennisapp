@@ -73,13 +73,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('settings', [AdminSettingController::class, 'index'])->name('settings.index');
     Route::post('settings', [AdminSettingController::class, 'update'])->name('settings.update');
 
-    // API Sync
+    // API Sync (Matchstat / Tennis API)
     Route::get('api-sync', [ApiSyncController::class, 'index'])->name('api-sync.index');
-    Route::post('api-sync/tournaments', [ApiSyncController::class, 'syncTournaments'])->name('api-sync.tournaments');
-    Route::post('api-sync/players', [ApiSyncController::class, 'syncPlayers'])->name('api-sync.players');
-    Route::post('api-sync/fixtures', [ApiSyncController::class, 'syncFixtures'])->name('api-sync.fixtures');
-    Route::post('api-sync/livescores', [ApiSyncController::class, 'syncLivescores'])->name('api-sync.livescores');
-    Route::post('api-sync/all', [ApiSyncController::class, 'syncAll'])->name('api-sync.all');
+    Route::post('api-sync/rankings', [ApiSyncController::class, 'syncRankings'])->name('api-sync.rankings');
+    Route::post('api-sync/live', [ApiSyncController::class, 'syncLive'])->name('api-sync.live');
 
     // Simulation (test tournaments)
     Route::post('simulate/next-round', [SimulationController::class, 'simulateNextRound'])->name('simulate.next-round');

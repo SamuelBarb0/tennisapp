@@ -47,4 +47,10 @@ return [
         'currency'     => env('MERCADOPAGO_CURRENCY', 'COP'),
     ],
 
+    'matchstat' => [
+        'key'  => env('MATCHSTAT_API_KEY'),
+        'host' => env('MATCHSTAT_API_HOST', 'tennis-api-atp-wta-itf.p.rapidapi.com'),
+        'base' => env('MATCHSTAT_API_BASE', 'https://tennis-api-atp-wta-itf.p.rapidapi.com'),
+    ],
+
 ];

@@ -3,24 +3,88 @@
 
 @section('content')
 
-{{-- ========== CARRUSEL DE BANNERS (1-3) ========== --}}
-@if($banners->count() > 0)
+{{-- ========== CARRUSEL HOME (hero default + banners admin) ========== --}}
+@php
+    // Total slides = 1 hero default + N banners. Hero is always slide 0.
+    $totalSlides = 1 + $banners->count();
+@endphp
 <section class="bg-tc-primary"
          x-data="{
             current: 0,
-            count: {{ $banners->count() }},
+            count: {{ $totalSlides }},
             autoTimer: null,
             init() {
-                if (this.count > 1) this.autoTimer = setInterval(() => this.next(), 6000);
+                if (this.count > 1) this.autoTimer = setInterval(() => this.next(), 7000);
             },
             next() { this.current = (this.current + 1) % this.count; },
             prev() { this.current = (this.current - 1 + this.count) % this.count; },
             go(i)  { this.current = i; }
          }">
-    <div class="relative max-w-7xl mx-auto">
-        <div class="relative overflow-hidden" style="aspect-ratio: 21/6; max-height:240px;">
+    <div class="relative">
+        <div class="relative overflow-hidden" style="min-height: 480px;">
+
+            {{-- ★ Slide 0: Hero default "Predice. Compite. Gana." ★ --}}
+            <div x-show="current === 0"
+                 x-transition:enter="transition ease-out duration-500"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 class="absolute inset-0 bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark overflow-hidden">
+                {{-- Orbes decorativos --}}
+                <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
+                <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
+
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20 relative">
+                    <div class="text-center fade-in">
+                        <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
+                            Predice. Compite. <span class="text-tc-accent">Gana.</span>
+                        </h1>
+                        <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
+                            Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.
+                        </p>
+                        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                            @guest
+                                <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
+                                    Comenzar gratis
+                                </a>
+                                <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
+                                    Ver torneos
+                                </a>
+                            @else
+                                <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
+                                    Hacer pronósticos
+                                </a>
+                                <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
+                                    ¿Cómo funciona?
+                                </a>
+                            @endguest
+                        </div>
+                        {{-- Stats --}}
+                        <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto">
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['tournaments'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Torneos</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['players'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Jugadores</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['total_points'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Puntos repartidos</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['users'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Participantes</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- ★ Slides 1+: Admin banners ★ --}}
             @foreach($banners as $i => $banner)
-            <div x-show="current === {{ $i }}"
+            @php $slideIndex = $i + 1; @endphp
+            <div x-show="current === {{ $slideIndex }}"
                  x-transition:enter="transition ease-out duration-500"
                  x-transition:enter-start="opacity-0"
                  x-transition:enter-end="opacity-100"
@@ -32,98 +96,46 @@
                 @elseif($src)
                     <img src="{{ $src }}" alt="{{ $banner->title }}" class="absolute inset-0 w-full h-full object-cover">
                 @else
-                    {{-- Decorative gradient when no media uploaded yet --}}
                     <div class="absolute inset-0 bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark"></div>
                 @endif
                 {{-- overlay con texto si hay título/subtítulo --}}
                 @if($banner->title || $banner->subtitle)
-                <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent flex items-center">
-                    <div class="px-6 sm:px-12 md:px-20 max-w-2xl">
-                        @if($banner->title)
-                        <h2 class="text-2xl md:text-4xl font-black text-white tracking-tight mb-1 drop-shadow-lg">{{ $banner->title }}</h2>
-                        @endif
-                        @if($banner->subtitle)
-                        <p class="text-sm md:text-base text-white/90 drop-shadow">{{ $banner->subtitle }}</p>
-                        @endif
+                <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-transparent flex items-center">
+                    <div class="max-w-7xl mx-auto px-6 sm:px-12 md:px-20 w-full">
+                        <div class="max-w-2xl">
+                            @if($banner->title)
+                            <h2 class="text-3xl md:text-5xl font-black text-white tracking-tight mb-2 drop-shadow-lg">{{ $banner->title }}</h2>
+                            @endif
+                            @if($banner->subtitle)
+                            <p class="text-base md:text-lg text-white/90 drop-shadow max-w-xl">{{ $banner->subtitle }}</p>
+                            @endif
+                        </div>
                     </div>
                 </div>
                 @endif
                 @if($banner->link)</a>@endif
             </div>
             @endforeach
+
         </div>
 
-        @if($banners->count() > 1)
+        @if($totalSlides > 1)
         {{-- Arrows --}}
-        <button x-on:click="prev()" class="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur transition">
+        <button x-on:click="prev()" class="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center backdrop-blur transition z-10">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
         </button>
-        <button x-on:click="next()" class="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center backdrop-blur transition">
+        <button x-on:click="next()" class="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center backdrop-blur transition z-10">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
         </button>
         {{-- Dots --}}
-        <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-            @foreach($banners as $i => $banner)
+        <div class="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+            @for($i = 0; $i < $totalSlides; $i++)
             <button x-on:click="go({{ $i }})"
-                    :class="current === {{ $i }} ? 'bg-tc-accent w-8' : 'bg-white/50 w-2'"
+                    :class="current === {{ $i }} ? 'bg-tc-accent w-8' : 'bg-white/50 hover:bg-white/70 w-2'"
                     class="h-2 rounded-full transition-all"></button>
-            @endforeach
+            @endfor
         </div>
         @endif
-    </div>
-</section>
-@endif
-
-{{-- Hero Section --}}
-<section class="relative bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark overflow-hidden">
-    {{-- Orbes decorativos --}}
-    <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
-    <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24 relative">
-        <div class="text-center fade-in">
-            <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
-                Predice. Compite. <span class="text-tc-accent">Gana.</span>
-            </h1>
-            <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10" style="animation-delay:0.15s">
-                Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.
-            </p>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center fade-in" style="animation-delay:0.3s">
-                @guest
-                    <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
-                        Comenzar gratis
-                    </a>
-                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
-                        Ver torneos
-                    </a>
-                @else
-                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
-                        Hacer pronósticos
-                    </a>
-                    <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
-                        ¿Cómo funciona?
-                    </a>
-                @endguest
-            </div>
-        </div>
-        {{-- Stats con contador animado --}}
-        <div class="mt-14 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto slide-up" style="animation-delay:0.45s">
-            <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['tournaments'] }}</div>
-                <div class="text-sm text-blue-200 mt-1">Torneos</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['players'] }}</div>
-                <div class="text-sm text-blue-200 mt-1">Jugadores</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['total_points'] }}</div>
-                <div class="text-sm text-blue-200 mt-1">Puntos repartidos</div>
-            </div>
-            <div class="text-center">
-                <div class="text-3xl md:text-4xl font-bold text-white count-up">{{ $stats['users'] }}</div>
-                <div class="text-sm text-blue-200 mt-1">Participantes</div>
-            </div>
-        </div>
     </div>
 </section>
 

@@ -12,7 +12,7 @@ class Player extends Model
 
     protected $fillable = [
         'name', 'slug', 'country', 'nationality_code', 'photo', 'ranking', 'category', 'bio',
-        'api_player_key',
+        'api_player_key', 'matchstat_id', 'wikidata_id',
     ];
 
     protected static function booted(): void

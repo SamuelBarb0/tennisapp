@@ -4,10 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
-use App\Services\SportradarService;
-use App\Services\Sync\TournamentSync;
-use App\Services\Sync\PlayerSync;
-use App\Services\Sync\MatchSync;
+use App\Models\Tournament;
+use App\Services\Tennis\MatchstatSyncService;
 use Illuminate\Http\Request;
 
 class ApiSyncController extends Controller
@@ -15,100 +13,58 @@ class ApiSyncController extends Controller
     public function index()
     {
         $lastSync = [
-            'tournaments' => Setting::get('last_sync_tournaments'),
-            'players' => Setting::get('last_sync_players'),
-            'fixtures' => Setting::get('last_sync_fixtures'),
-            'livescores' => Setting::get('last_sync_livescores'),
+            'rankings'  => Setting::get('last_sync_rankings'),
+            'live'      => Setting::get('last_sync_live'),
         ];
 
-        return view('admin.api-sync.index', compact('lastSync'));
+        // Cron health: heartbeat should be <2 min old if cron is running.
+        $heartbeat = Setting::get('cron_heartbeat');
+        $cronStatus = [
+            'last' => $heartbeat,
+            'ok'   => $heartbeat
+                && \Illuminate\Support\Carbon::parse($heartbeat)->diffInMinutes(now()) <= 2,
+        ];
+
+        // Tournaments that have matchstat_tournament_id set (i.e. ready to auto-sync)
+        $linkedTournaments = Tournament::whereNotNull('matchstat_tournament_id')
+            ->orderByDesc('start_date')
+            ->take(10)
+            ->get();
+
+        $unlinkedCount = Tournament::where('is_active', true)
+            ->whereNull('matchstat_tournament_id')
+            ->count();
+
+        return view('admin.api-sync.index', compact('lastSync', 'linkedTournaments', 'unlinkedCount', 'cronStatus'));
     }
 
-    public function syncTournaments()
+    public function syncRankings(MatchstatSyncService $sync)
     {
-        $sync = new TournamentSync(app(SportradarService::class));
-        $result = $sync->sync();
-
-        if (isset($result['error'])) {
-            return back()->with('error', $result['error']);
+        try {
+            $stats = $sync->syncRankings(200);
+            Setting::set('last_sync_rankings', now()->toDateTimeString());
+            return back()->with('success', "Rankings actualizados: ATP {$stats['atp']}, WTA {$stats['wta']}.");
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Error al sincronizar rankings: ' . $e->getMessage());
         }
-
-        Setting::set('last_sync_tournaments', now()->toDateTimeString());
-
-        return back()->with('success', "Torneos sincronizados: {$result['created']} creados, {$result['updated']} actualizados.");
     }
 
-    public function syncPlayers()
+    public function syncLive(MatchstatSyncService $sync, Request $request)
     {
-        $sync = new PlayerSync(app(SportradarService::class));
-        $result = $sync->sync('all');
+        try {
+            if ($request->filled('tournament_id')) {
+                $t = Tournament::find($request->tournament_id);
+                if (!$t) return back()->with('error', 'Torneo no encontrado.');
+                $result = $sync->syncTournamentLive($t);
+                Setting::set('last_sync_live', now()->toDateTimeString());
+                return back()->with('success', "Sincronizado {$t->name}: " . json_encode($result));
+            }
 
-        if (isset($result['error'])) {
-            return back()->with('error', $result['error']);
+            $results = $sync->syncAllActive();
+            Setting::set('last_sync_live', now()->toDateTimeString());
+            return back()->with('success', 'Sync completo. ' . count($results) . ' torneo(s) procesado(s).');
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Error al sincronizar: ' . $e->getMessage());
         }
-
-        Setting::set('last_sync_players', now()->toDateTimeString());
-
-        return back()->with('success', "Jugadores sincronizados: {$result['created']} creados, {$result['updated']} actualizados.");
-    }
-
-    public function syncFixtures(Request $request)
-    {
-        $sync = new MatchSync(app(SportradarService::class));
-        $result = $sync->syncAll();
-
-        if (isset($result['error'])) {
-            return back()->with('error', $result['error']);
-        }
-
-        Setting::set('last_sync_fixtures', now()->toDateTimeString());
-
-        return back()->with('success', "Partidos sincronizados: {$result['created']} creados, {$result['updated']} actualizados, {$result['skipped']} omitidos. Predicciones: {$result['predictionsScored']}.");
-    }
-
-    public function syncLivescores()
-    {
-        $sync = new MatchSync(app(SportradarService::class));
-        $result = $sync->syncLive();
-
-        if (isset($result['error'])) {
-            return back()->with('error', $result['error']);
-        }
-
-        Setting::set('last_sync_livescores', now()->toDateTimeString());
-
-        return back()->with('success', "Livescores sincronizados: {$result['created']} creados, {$result['updated']} actualizados. Predicciones: {$result['predictionsScored']}.");
-    }
-
-    public function syncAll()
-    {
-        $api = app(SportradarService::class);
-        $messages = [];
-
-        // Tournaments
-        $tSync = new TournamentSync($api);
-        $tResult = $tSync->sync();
-        if (!isset($tResult['error'])) {
-            Setting::set('last_sync_tournaments', now()->toDateTimeString());
-            $messages[] = "Torneos: {$tResult['created']} creados, {$tResult['updated']} actualizados";
-        }
-
-        // Players
-        $pSync = new PlayerSync($api);
-        $pResult = $pSync->sync('all');
-        if (!isset($pResult['error'])) {
-            Setting::set('last_sync_players', now()->toDateTimeString());
-            $messages[] = "Jugadores: {$pResult['created']} creados, {$pResult['updated']} actualizados";
-        }
-
-        // Fixtures (all active tournaments)
-        $mSync = new MatchSync($api);
-        $mResult = $mSync->syncAll();
-        if (!isset($mResult['error'])) {
-            Setting::set('last_sync_fixtures', now()->toDateTimeString());
-            $messages[] = "Partidos: {$mResult['created']} creados, {$mResult['updated']} actualizados";
-        }
-
-        return back()->with('success', implode(' | ', $messages));
     }
 }

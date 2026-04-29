@@ -14,7 +14,7 @@ class TennisMatch extends Model
     protected $fillable = [
         'tournament_id', 'player1_id', 'player2_id', 'round',
         'bracket_position', 'scheduled_at', 'score', 'winner_id', 'status',
-        'api_event_key',
+        'api_event_key', 'matchstat_match_id',
     ];
 
     protected function casts(): array

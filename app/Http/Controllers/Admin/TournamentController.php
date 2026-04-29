@@ -39,6 +39,7 @@ class TournamentController extends Controller
             'is_active' => 'boolean',
             'featured_on_home' => 'boolean',
             'price' => 'nullable|numeric|min:0',
+            'matchstat_tournament_id' => 'nullable|integer',
             'image' => 'nullable|image|max:2048',
         ]);
         $data['is_premium'] = $request->boolean('is_premium');
@@ -86,6 +87,7 @@ class TournamentController extends Controller
             'is_active' => 'boolean',
             'featured_on_home' => 'boolean',
             'price' => 'nullable|numeric|min:0',
+            'matchstat_tournament_id' => 'nullable|integer',
             'image' => 'nullable|image|max:2048',
         ]);
         $data['is_premium'] = $request->boolean('is_premium');

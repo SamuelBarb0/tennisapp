@@ -1,259 +1,161 @@
 @extends('layouts.admin')
-
 @section('title', 'Sincronización API')
 
 @section('content')
 <div class="max-w-5xl mx-auto space-y-6">
+
     {{-- Header --}}
-    <div class="flex items-center justify-between">
-        <div>
-            <h2 class="text-2xl font-bold text-gray-900">Sincronización API Tennis</h2>
-            <p class="text-sm text-gray-500 mt-1">Sincroniza torneos, jugadores y partidos desde la API de Tennis en tiempo real.</p>
-        </div>
-        <form method="POST" action="{{ route('admin.api-sync.all') }}">
-            @csrf
-            <button type="submit" class="bg-tc-primary text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#16324d] transition-colors flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                Sincronizar Todo
-            </button>
-        </form>
+    <div>
+        <h2 class="text-2xl font-bold text-gray-900">Sincronización API Tennis</h2>
+        <p class="text-sm text-gray-500 mt-1">Conexión con <strong>Matchstat (Tennis API ATP/WTA/ITF)</strong>. La sincronización corre automáticamente cada 2 minutos durante horas de juego.</p>
     </div>
 
-    {{-- Sync Cards Grid --}}
+    {{-- Auto-sync status banner — color depends on heartbeat freshness --}}
+    @php
+        $cronOk = $cronStatus['ok'] ?? false;
+        $heartbeat = $cronStatus['last'] ?? null;
+        $heartbeatHuman = $heartbeat ? \Illuminate\Support\Carbon::parse($heartbeat)->diffForHumans() : 'nunca';
+    @endphp
+    @if($cronOk)
+    <div class="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-5 flex items-start gap-4">
+        <div class="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center text-white shrink-0 relative">
+            <span class="absolute inset-0 rounded-xl bg-green-400 animate-ping opacity-50"></span>
+            <svg class="w-6 h-6 relative" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="font-bold text-green-900">Cron funcionando ✓</h3>
+            <p class="text-sm text-green-700 mt-1">
+                El scheduler corrió hace <strong>{{ $heartbeatHuman }}</strong>.
+                Los partidos se sincronizan cada 2 min entre 10:00–23:59 UTC y los rankings cada lunes a las 5:00 UTC.
+            </p>
+        </div>
+    </div>
+    @else
+    <div class="bg-gradient-to-br from-red-50 to-rose-50 border-2 border-red-300 rounded-2xl p-5 flex items-start gap-4">
+        <div class="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center text-white shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </div>
+        <div class="flex-1">
+            <h3 class="font-bold text-red-900">Cron NO está corriendo</h3>
+            <p class="text-sm text-red-700 mt-1">
+                Último heartbeat: <strong>{{ $heartbeatHuman }}</strong>.
+                Si nunca se ha registrado o tiene más de 2 minutos, configura el cron en tu servidor:
+            </p>
+            <pre class="mt-3 bg-red-900 text-green-300 p-3 rounded-lg text-xs overflow-x-auto">* * * * * cd {{ base_path() }} && php artisan schedule:run >> /dev/null 2>&1</pre>
+            <p class="text-xs text-red-600 mt-2">
+                En Hostinger: Panel → <strong>Cron Jobs</strong> → Crear nuevo → Frecuencia "cada minuto" → Comando arriba.
+            </p>
+        </div>
+    </div>
+    @endif
+
+    {{-- Manual sync cards --}}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {{-- Tournaments --}}
+
+        {{-- Rankings --}}
         <div class="bg-white rounded-2xl border border-gray-200 p-6">
             <div class="flex items-start justify-between mb-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                    <div class="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
+                        <svg class="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
                     </div>
                     <div>
-                        <h3 class="font-semibold text-gray-900">Torneos</h3>
-                        <p class="text-xs text-gray-500">ATP Singles & WTA Singles</p>
+                        <h3 class="font-bold">Rankings ATP/WTA</h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Top 200 de cada tour</p>
                     </div>
                 </div>
             </div>
-            <p class="text-sm text-gray-600 mb-4">Sincroniza la lista completa de torneos ATP y WTA con superficie y tipo.</p>
-            @if($lastSync['tournaments'])
-                <p class="text-xs text-gray-400 mb-4">Última sync: {{ $lastSync['tournaments'] }}</p>
-            @endif
-            <form method="POST" action="{{ route('admin.api-sync.tournaments') }}">
-                @csrf
-                <button type="submit" class="w-full bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-100 transition-colors">
-                    Sincronizar Torneos
-                </button>
-            </form>
-        </div>
-
-        {{-- Players --}}
-        <div class="bg-white rounded-2xl border border-gray-200 p-6">
-            <div class="flex items-start justify-between mb-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                    </div>
-                    <div>
-                        <h3 class="font-semibold text-gray-900">Jugadores & Rankings</h3>
-                        <p class="text-xs text-gray-500">Rankings ATP y WTA</p>
-                    </div>
-                </div>
+            <div class="text-xs text-gray-500 mb-3">
+                Última: <strong class="text-gray-800">{{ $lastSync['rankings'] ?? 'Nunca' }}</strong>
             </div>
-            <p class="text-sm text-gray-600 mb-4">Importa jugadores con su ranking actual, país y categoría desde los standings oficiales.</p>
-            @if($lastSync['players'])
-                <p class="text-xs text-gray-400 mb-4">Última sync: {{ $lastSync['players'] }}</p>
-            @endif
-            <form method="POST" action="{{ route('admin.api-sync.players') }}">
+            <form method="POST" action="{{ route('admin.api-sync.rankings') }}">
                 @csrf
-                <button type="submit" class="w-full bg-green-50 text-green-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-green-100 transition-colors">
-                    Sincronizar Jugadores
-                </button>
+                <button type="submit" class="w-full px-4 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-bold hover:bg-tc-primary-hover transition">Sincronizar ahora</button>
             </form>
         </div>
 
-        {{-- Fixtures --}}
-        <div class="bg-white rounded-2xl border border-gray-200 p-6">
-            <div class="flex items-start justify-between mb-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                    </div>
-                    <div>
-                        <h3 class="font-semibold text-gray-900">Partidos / Fixtures</h3>
-                        <p class="text-xs text-gray-500">Programación y resultados</p>
-                    </div>
-                </div>
-            </div>
-            <p class="text-sm text-gray-600 mb-4">Sincroniza partidos por rango de fechas. Incluye resultados y evalúa predicciones automáticamente.</p>
-            @if($lastSync['fixtures'])
-                <p class="text-xs text-gray-400 mb-4">Última sync: {{ $lastSync['fixtures'] }}</p>
-            @endif
-            <form method="POST" action="{{ route('admin.api-sync.fixtures') }}" class="space-y-3">
-                @csrf
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Desde</label>
-                        <input type="date" name="date_from" value="{{ now()->format('Y-m-d') }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                    </div>
-                    <div>
-                        <label class="text-xs text-gray-500 block mb-1">Hasta</label>
-                        <input type="date" name="date_to" value="{{ now()->addDays(7)->format('Y-m-d') }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                    </div>
-                </div>
-                <button type="submit" class="w-full bg-purple-50 text-purple-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-purple-100 transition-colors">
-                    Sincronizar Partidos
-                </button>
-            </form>
-        </div>
-
-        {{-- Livescores --}}
+        {{-- Live --}}
         <div class="bg-white rounded-2xl border border-gray-200 p-6">
             <div class="flex items-start justify-between mb-4">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
-                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <span class="relative flex h-3 w-3">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                        </span>
                     </div>
                     <div>
-                        <h3 class="font-semibold text-gray-900">Livescores</h3>
-                        <p class="text-xs text-gray-500">Marcadores en tiempo real</p>
+                        <h3 class="font-bold">Live + Resultados</h3>
+                        <p class="text-xs text-gray-400 mt-0.5">Fixtures + scores de torneos activos</p>
                     </div>
                 </div>
             </div>
-            <p class="text-sm text-gray-600 mb-4">Actualiza marcadores de partidos en vivo. Detecta partidos finalizados y evalúa predicciones.</p>
-            @if($lastSync['livescores'])
-                <p class="text-xs text-gray-400 mb-4">Última sync: {{ $lastSync['livescores'] }}</p>
-            @endif
-            <form method="POST" action="{{ route('admin.api-sync.livescores') }}">
+            <div class="text-xs text-gray-500 mb-3">
+                Última: <strong class="text-gray-800">{{ $lastSync['live'] ?? 'Nunca' }}</strong>
+            </div>
+            <form method="POST" action="{{ route('admin.api-sync.live') }}">
                 @csrf
-                <button type="submit" class="w-full bg-red-50 text-red-700 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors">
-                    Sincronizar Livescores
-                </button>
+                <button type="submit" class="w-full px-4 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-bold hover:bg-tc-primary-hover transition">Sincronizar ahora</button>
             </form>
         </div>
     </div>
 
-    {{-- ═══ SIMULADOR DE TORNEOS TEST ═══ --}}
-    @php
-        $testTournaments = \App\Models\Tournament::where('slug', 'like', '%test%')
-            ->withCount(['matches', 'matches as finished_matches_count' => fn($q) => $q->where('status','finished')])
-            ->get();
-    @endphp
-    @if($testTournaments->count() > 0)
-    <div class="bg-white rounded-2xl border-2 border-orange-200 p-6">
-        <div class="flex items-center gap-3 mb-1">
-            <div class="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-                <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
+    {{-- Linked tournaments --}}
+    <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <div>
-                <h3 class="font-bold text-gray-900">Simulador de Torneos Test</h3>
-                <p class="text-xs text-gray-500">Simula resultados ronda a ronda para demos y pruebas</p>
+                <h3 class="font-bold">Torneos enlazados a Matchstat</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Solo estos se sincronizan automáticamente</p>
             </div>
-            <span class="ml-auto px-2.5 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">SOLO TEST</span>
+            @if($unlinkedCount > 0)
+            <span class="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full font-bold">
+                {{ $unlinkedCount }} torneo(s) sin enlazar
+            </span>
+            @endif
         </div>
-
-        <div class="mt-5 space-y-4">
-            @foreach($testTournaments as $t)
-            @php
-                $progress = $t->matches_count > 0 ? round(($t->finished_matches_count / $t->matches_count) * 100) : 0;
-                $nextRound = null;
-                foreach(['R128','R64','R32','R16','QF','SF','F'] as $r) {
-                    if(\App\Models\TennisMatch::where('tournament_id',$t->id)->where('round',$r)->where('status','pending')->exists()) {
-                        $nextRound = $r; break;
-                    }
-                }
-                $isComplete = $progress === 100;
-            @endphp
-            <div class="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
-                <div class="flex items-start justify-between gap-4 mb-3">
-                    <div>
-                        <div class="font-semibold text-sm text-gray-900">{{ $t->name }}</div>
-                        <div class="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
-                            <span class="px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{{ $t->type }}</span>
-                            <span>{{ $t->surface }}</span>
-                            <span class="w-1 h-1 rounded-full bg-gray-300"></span>
-                            <span>{{ $t->finished_matches_count }}/{{ $t->matches_count }} partidos</span>
-                            @if($nextRound && !$isComplete)
-                                <span class="w-1 h-1 rounded-full bg-gray-300"></span>
-                                <span class="text-orange-600 font-medium">Próxima: {{ $nextRound }}</span>
-                            @elseif($isComplete)
-                                <span class="text-green-600 font-medium">✓ Completado</span>
-                            @endif
-                        </div>
+        @if($linkedTournaments->isEmpty())
+        <div class="p-8 text-center text-sm text-gray-400">
+            Ningún torneo tiene <code>matchstat_tournament_id</code> configurado todavía.
+            <br>
+            <span class="text-xs">Edita un torneo y agrega el ID de Matchstat para activar el sync automático.</span>
+        </div>
+        @else
+        <div class="divide-y divide-gray-100">
+            @foreach($linkedTournaments as $t)
+            <div class="flex items-center gap-4 px-6 py-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br {{ $t->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($t->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} flex items-center justify-center text-white font-black shrink-0">
+                    {{ substr($t->type, 0, 1) }}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-sm truncate">{{ $t->name }}</div>
+                    <div class="text-[10px] text-gray-400">
+                        Matchstat ID: <code class="font-mono">{{ $t->matchstat_tournament_id }}</code>
+                        · Última: {{ $t->last_synced_at?->diffForHumans() ?? 'nunca' }}
                     </div>
                 </div>
-
-                {{-- Barra de progreso --}}
-                <div class="w-full h-1.5 bg-gray-200 rounded-full mb-3 overflow-hidden">
-                    <div class="h-full bg-orange-400 rounded-full transition-all" style="width: {{ $progress }}%"></div>
-                </div>
-
-                {{-- Botones --}}
-                <div class="flex flex-wrap gap-2">
-                    {{-- Simular siguiente ronda --}}
-                    @if(!$isComplete)
-                    <form method="POST" action="{{ route('admin.simulate.next-round') }}" class="inline">
-                        @csrf
-                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
-                        <input type="hidden" name="upset" value="20">
-                        <button type="submit"
-                                class="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                            Simular {{ $nextRound ?? 'siguiente' }}
-                        </button>
-                    </form>
-
-                    {{-- Simular con upset --}}
-                    <form method="POST" action="{{ route('admin.simulate.next-round') }}" class="inline">
-                        @csrf
-                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
-                        <input type="hidden" name="upset" value="40">
-                        <button type="submit"
-                                class="flex items-center gap-1.5 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded-lg transition-colors"
-                                title="40% de probabilidad de sorpresa">
-                            🔥 Con upsets
-                        </button>
-                    </form>
-
-                    {{-- Simular todo --}}
-                    <form method="POST" action="{{ route('admin.simulate.all') }}" class="inline">
-                        @csrf
-                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
-                        <input type="hidden" name="upset" value="20">
-                        <button type="submit"
-                                class="flex items-center gap-1.5 px-3 py-2 bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold rounded-lg transition-colors">
-                            ⚡ Simular todo
-                        </button>
-                    </form>
-                    @endif
-
-                    {{-- Reiniciar siempre disponible --}}
-                    <form method="POST" action="{{ route('admin.simulate.reset') }}" class="inline"
-                          onsubmit="return confirm('¿Reiniciar {{ addslashes($t->name) }}? Los resultados se borrarán.')">
-                        @csrf
-                        <input type="hidden" name="tournament_id" value="{{ $t->id }}">
-                        <button type="submit"
-                                class="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold rounded-lg transition-colors">
-                            ↺ Reiniciar
-                        </button>
-                    </form>
-                </div>
+                <form method="POST" action="{{ route('admin.api-sync.live') }}">
+                    @csrf
+                    <input type="hidden" name="tournament_id" value="{{ $t->id }}">
+                    <button type="submit" class="px-3 py-1.5 text-xs font-bold text-tc-primary bg-tc-primary/10 hover:bg-tc-primary/20 rounded-lg transition">Sync</button>
+                </form>
             </div>
             @endforeach
         </div>
-
-        <p class="mt-4 text-xs text-gray-400">* "Con upsets" aplica 40% de probabilidad de sorpresas. "Simular todo" completa el torneo de golpe.</p>
+        @endif
     </div>
-    @endif
 
-    {{-- Info Card --}}
-    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5">
-        <div class="flex gap-3">
-            <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <div class="text-sm text-amber-800">
-                <p class="font-medium mb-1">Sincronización automática</p>
-                <p>Los livescores se sincronizan automáticamente cada 3 minutos durante horarios de partidos (10:00-23:59). Los fixtures se actualizan diariamente a las 6:00 AM y los rankings semanalmente los lunes.</p>
-            </div>
+    {{-- Setup help --}}
+    <details class="bg-gray-50 rounded-2xl border border-gray-200">
+        <summary class="px-6 py-4 cursor-pointer font-bold text-gray-700 select-none">
+            ¿Cómo configurar el cron en el servidor?
+        </summary>
+        <div class="px-6 pb-6 text-sm text-gray-600 space-y-2">
+            <p>En tu hosting (Hostinger / cPanel / VPS), agrega esta línea al crontab:</p>
+            <pre class="bg-gray-900 text-green-400 p-3 rounded-lg text-xs overflow-x-auto"># Laravel scheduler — corre cada minuto
+* * * * * cd /home/user/domains/tudominio.com/public_html && php artisan schedule:run >> /dev/null 2>&1</pre>
+            <p class="text-xs text-gray-500">Una vez configurado, el sistema correrá los syncs definidos en <code>routes/console.php</code> automáticamente. Para Hostinger: Panel → Cron Jobs → Crear nuevo cron job → frecuencia "cada minuto".</p>
         </div>
-    </div>
+    </details>
+
 </div>
 @endsection
