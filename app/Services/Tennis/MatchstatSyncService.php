@@ -33,11 +33,11 @@ class MatchstatSyncService
     /**
      * Pull top-N rankings from Matchstat for ATP and WTA.
      *
-     * Strategy to avoid duplicates with seeded/legacy data:
-     *   1. Try to match by matchstat_id (already linked players)
-     *   2. Fall back to name + category match (existing seed players get their
-     *      matchstat_id assigned, no duplicate is created)
-     *   3. Only as a last resort do we create a fresh row
+     * Resolution strategy (in order):
+     *   1. matchstat_id — already-linked players
+     *   2. slug — the only UNIQUE column besides id, so we key the upsert here
+     *      to avoid 1062 duplicate-slug errors when legacy rows pre-exist
+     *   3. loose name match — accent/punctuation insensitive fallback
      */
     public function syncRankings(int $top = 200): array
     {
@@ -52,17 +52,20 @@ class MatchstatSyncService
                 $p = $row['player'] ?? null;
                 if (!$p || empty($p['id'])) continue;
 
-                $player = $this->resolvePlayer($p, $category);
+                $name = $p['name'] ?? 'Unknown';
+                $slug = Str::slug($name) ?: ('matchstat-' . $p['id']);
+                $countryName = is_array($p['country'] ?? null) ? ($p['country']['name'] ?? null) : ($p['country'] ?? null);
+
+                $player = $this->resolvePlayer($p, $slug);
 
                 $player->fill([
                     'matchstat_id'     => $p['id'],
-                    'name'             => $p['name'] ?? $player->name ?? 'Unknown',
+                    'name'             => $name,
+                    'slug'             => $slug,
                     'category'         => $category,
                     'ranking'          => $row['position'] ?? null,
                     'nationality_code' => $this->ioc3ToIso2($p['countryAcr'] ?? null) ?? $player->nationality_code,
-                    // `country` is the verbose label (NOT NULL in legacy schema). Use the
-                    // human-readable name from the API when present, fall back to the IOC code.
-                    'country'          => $p['country']['name'] ?? $p['countryAcr'] ?? $player->country ?? 'Unknown',
+                    'country'          => $countryName ?? $p['countryAcr'] ?? $player->country ?? 'Unknown',
                 ])->save();
 
                 if ($player->wasRecentlyCreated) $stats['created']++;
@@ -77,37 +80,28 @@ class MatchstatSyncService
      * Find an existing Player record that corresponds to the API payload, or
      * create a new one. Tries (in order):
      *   1. matchstat_id (exact link)
-     *   2. exact name + category
-     *   3. case-insensitive name + category (handles "Felix Auger Aliassime" vs
-     *      "Félix Auger-Aliassime", small typos, etc.)
+     *   2. slug (UNIQUE in schema — anything that would collide is what we reuse)
+     *   3. loose name match (strip accents/punctuation)
      *   4. new Player()
      */
-    private function resolvePlayer(array $apiPlayer, string $category): Player
+    private function resolvePlayer(array $apiPlayer, string $slug): Player
     {
-        // 1) Already linked
         if ($existing = Player::where('matchstat_id', $apiPlayer['id'])->first()) {
             return $existing;
         }
 
+        if ($slug && $bySlug = Player::where('slug', $slug)->first()) {
+            return $bySlug;
+        }
+
         $name = $apiPlayer['name'] ?? '';
-        if ($name === '') return new Player();
+        $normalized = $name ? $this->normalizeName($name) : '';
+        if ($normalized) {
+            $loose = Player::all()
+                ->first(fn($p) => $this->normalizeName($p->name ?? '') === $normalized);
+            if ($loose) return $loose;
+        }
 
-        // 2) Exact name + category, prefer a row that doesn't have a different matchstat_id
-        $byName = Player::where('name', $name)
-            ->where('category', $category)
-            ->whereNull('matchstat_id')
-            ->first();
-        if ($byName) return $byName;
-
-        // 3) Loose match — strip accents/punctuation
-        $normalized = $this->normalizeName($name);
-        $loose = Player::where('category', $category)
-            ->whereNull('matchstat_id')
-            ->get()
-            ->first(fn($p) => $this->normalizeName($p->name) === $normalized);
-        if ($loose) return $loose;
-
-        // 4) New player
         return new Player();
     }
 
@@ -270,16 +264,25 @@ class MatchstatSyncService
         if (str_contains($p['name'] ?? '', '/')) return null;
 
         $category = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
+        $name = $p['name'] ?? 'Unknown';
+        $slug = Str::slug($name) ?: ('matchstat-' . $p['id']);
 
-        return Player::updateOrCreate(
-            ['matchstat_id' => $p['id']],
-            [
-                'name'             => $p['name'] ?? 'Unknown',
-                'category'         => $category,
-                'nationality_code' => $this->ioc3ToIso2($p['countryAcr'] ?? null),
-                'country'          => $p['countryAcr'] ?? 'Unknown',
-            ]
-        );
+        // Resolve existing row by matchstat_id, then slug — slug is UNIQUE so
+        // a blind insert can collide with a legacy seed row.
+        $player = Player::where('matchstat_id', $p['id'])->first()
+            ?? Player::where('slug', $slug)->first()
+            ?? new Player();
+
+        $player->fill([
+            'matchstat_id'     => $p['id'],
+            'name'             => $name,
+            'slug'             => $slug,
+            'category'         => $category,
+            'nationality_code' => $this->ioc3ToIso2($p['countryAcr'] ?? null) ?? $player->nationality_code,
+            'country'          => $p['countryAcr'] ?? $player->country ?? 'Unknown',
+        ])->save();
+
+        return $player;
     }
 
     /**
