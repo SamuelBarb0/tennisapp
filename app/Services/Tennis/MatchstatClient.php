@@ -128,6 +128,15 @@ class MatchstatClient
         return $this->get("/tennis/v2/{$type}/tournament/info/{$tournamentId}", $query, self::TTL_TOURNAMENT);
     }
 
+    /**
+     * Full season calendar — every tournament scheduled in the year, with tier
+     * (Grand Slam / ATP Masters 1000 / WTA 1000 / ATP 500 / Challenger / ITF…).
+     */
+    public function tournamentCalendar(string $type, int $year, array $query = []): ?array
+    {
+        return $this->get("/tennis/v2/{$type}/tournament/calendar/{$year}", $query, self::TTL_CALENDAR);
+    }
+
     /** Player profile */
     public function playerProfile(string $type, int $playerId, array $query = []): ?array
     {

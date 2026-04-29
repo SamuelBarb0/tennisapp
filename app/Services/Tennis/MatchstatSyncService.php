@@ -137,51 +137,24 @@ class MatchstatSyncService
     ];
 
     /**
-     * Discover tournaments by walking forward day-by-day through `fixtures/{date}`
-     * and pulling tier info for every unique tournamentId we see. Filters down to
-     * Grand Slams + Masters 1000 + WTA 1000 and upserts into the local DB.
-     *
-     * Why this approach: the API has no calendar/season endpoint, but fixtures by
-     * date returns tournamentId, and tournament/info/{id} gives us the tier. We
-     * scan ahead `daysAhead` days from today (default 60 = ~2 months) which is
-     * plenty for predictions.
-     *
-     * Idempotent — safe to run daily.
+     * Pull the full ATP + WTA season calendar from Matchstat and upsert the
+     * covered tournaments (Grand Slams + Masters 1000 + WTA 1000) into the
+     * local DB. Idempotent — safe to run daily.
      */
-    public function syncCalendar(int $daysAhead = 60): array
+    public function syncCalendar(int $year): array
     {
         $stats = ['imported' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
 
         foreach (['atp', 'wta'] as $type) {
-            // 1) Scan fixtures across the next N days, dedupe tournament ids
-            $tournamentIds = [];
-            for ($i = 0; $i <= $daysAhead; $i++) {
-                $date = now()->addDays($i)->format('Y-m-d');
-                $resp = $this->client->fixturesByDate($type, $date, ['include' => 'tournament']);
-                if (!$resp || !isset($resp['data']) || empty($resp['data'])) continue;
-
-                foreach ($resp['data'] as $f) {
-                    $tid = $f['tournamentId'] ?? null;
-                    if (!$tid) continue;
-                    // Stash the embedded tournament summary so we don't have to
-                    // re-fetch name/country if /info fails for some reason.
-                    $tournamentIds[$tid] = $f['tournament'] ?? ($tournamentIds[$tid] ?? null);
-                }
-            }
-
-            if (empty($tournamentIds)) {
-                $stats['errors'][] = "{$type}: no fixtures in next {$daysAhead} days";
+            $resp = $this->client->tournamentCalendar($type, $year);
+            if (!$resp || !isset($resp['data'])) {
+                $stats['errors'][] = "{$type}/{$year}: empty calendar response";
                 continue;
             }
 
-            // 2) Fetch tier info for each unique tournament and filter
-            foreach ($tournamentIds as $tid => $summary) {
-                $info = $this->client->tournamentInfo($type, (int) $tid);
-                $row = $info['data'] ?? null;
-                if (!$row) {
-                    $stats['skipped']++;
-                    continue;
-                }
+            foreach ($resp['data'] as $row) {
+                $tid = $row['id'] ?? null;
+                if (!$tid) { $stats['skipped']++; continue; }
 
                 $tier = mb_strtolower((string) ($row['tier'] ?? ''));
                 $isCovered = false;
@@ -193,28 +166,29 @@ class MatchstatSyncService
                     continue;
                 }
 
-                $name = trim($row['name'] ?? $summary['name'] ?? 'Unknown tournament');
+                $name = trim($row['name'] ?? 'Unknown tournament');
+                // Slug differentiates ATP vs WTA — both tours often share names.
+                $slug = Str::slug($name) . '-' . $type;
                 $existing = Tournament::where('matchstat_tournament_id', $tid)->first()
-                    ?? Tournament::where('slug', Str::slug($name))->first();
+                    ?? Tournament::where('slug', $slug)->first();
 
-                $startDate = $this->parseDate($row['date'] ?? $summary['date'] ?? null);
-                // /info doesn't return endDate; estimate +14 days for Grand Slams,
-                // +9 for Masters 1000, +9 for WTA 1000 (typical durations).
+                $startDate = $this->parseDate($row['date'] ?? null);
+                // Calendar endpoint doesn't expose endDate. Estimate by tier:
+                // Grand Slams = 14 days, Masters 1000 / WTA 1000 = 9 days.
                 $isGrandSlam = str_contains($tier, 'grand slam');
                 $endDate = $startDate ? $startDate->copy()->addDays($isGrandSlam ? 14 : 9) : null;
                 $tierLabel = $this->resolveTierLabel($type, $tier);
                 $countryName = $row['coutry']['name']  // (sic) — Matchstat misspells 'country'
                     ?? $row['country']['name']
-                    ?? (is_string($row['country'] ?? null) ? $row['country'] : null)
-                    ?? $summary['countryAcr']
-                    ?? null;
-                $surface = $row['court']['name'] ?? $row['court'] ?? null;
+                    ?? (is_string($row['country'] ?? null) ? $row['country'] : null);
+                $surface = $row['court']['name'] ?? null;
 
                 $attrs = [
                     'matchstat_tournament_id' => $tid,
                     'name'                    => $name,
+                    'slug'                    => $slug,
                     'type'                    => $tierLabel,
-                    'season'                  => $startDate?->year ?? now()->year,
+                    'season'                  => $startDate?->year ?? $year,
                     'country'                 => $countryName,
                     'surface'                 => $surface,
                     'start_date'              => $startDate,
