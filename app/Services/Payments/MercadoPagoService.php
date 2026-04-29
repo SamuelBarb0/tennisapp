@@ -128,7 +128,8 @@ class MercadoPagoService
 
         try {
             $client = new PaymentClient();
-            $mpPayment = $client->get($paymentId);
+            // SDK requires int, but webhook payloads carry the id as a string.
+            $mpPayment = $client->get((int) $paymentId);
         } catch (MPApiException $e) {
             Log::error('MP webhook lookup failed', [
                 'mp_payment_id' => $paymentId,
@@ -182,7 +183,7 @@ class MercadoPagoService
     {
         try {
             $client = new PaymentClient();
-            $mpPayment = $client->get($mpPaymentId);
+            $mpPayment = $client->get((int) $mpPaymentId);
         } catch (MPApiException) {
             return null;
         }
