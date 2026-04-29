@@ -60,6 +60,9 @@ class MatchstatSyncService
                     'category'         => $category,
                     'ranking'          => $row['position'] ?? null,
                     'nationality_code' => $this->ioc3ToIso2($p['countryAcr'] ?? null) ?? $player->nationality_code,
+                    // `country` is the verbose label (NOT NULL in legacy schema). Use the
+                    // human-readable name from the API when present, fall back to the IOC code.
+                    'country'          => $p['country']['name'] ?? $p['countryAcr'] ?? $player->country ?? 'Unknown',
                 ])->save();
 
                 if ($player->wasRecentlyCreated) $stats['created']++;
@@ -274,6 +277,7 @@ class MatchstatSyncService
                 'name'             => $p['name'] ?? 'Unknown',
                 'category'         => $category,
                 'nationality_code' => $this->ioc3ToIso2($p['countryAcr'] ?? null),
+                'country'          => $p['countryAcr'] ?? 'Unknown',
             ]
         );
     }
