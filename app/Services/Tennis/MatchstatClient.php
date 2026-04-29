@@ -122,10 +122,10 @@ class MatchstatClient
         return $this->get("/tennis/v2/{$type}/ranking/singles", $query, self::TTL_RANKINGS);
     }
 
-    /** Tournaments scheduled in a season (year). Used to auto-discover the calendar. */
-    public function tournamentsBySeason(string $type, int $year, array $query = []): ?array
+    /** Tournament metadata by id — includes tier ('Grand Slam', 'Masters 1000', etc.) */
+    public function tournamentInfo(string $type, int $tournamentId, array $query = []): ?array
     {
-        return $this->get("/tennis/v2/{$type}/tournament/season/{$year}", $query, self::TTL_CALENDAR);
+        return $this->get("/tennis/v2/{$type}/tournament/info/{$tournamentId}", $query, self::TTL_TOURNAMENT);
     }
 
     /** Player profile */

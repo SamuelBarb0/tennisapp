@@ -8,26 +8,28 @@ use Illuminate\Console\Command;
 
 /**
  * Auto-discovers covered tournaments (Grand Slams, ATP Masters 1000, WTA 1000)
- * for a given season and upserts them into the local DB. Idempotent.
+ * by scanning fixtures forward from today and resolving each tournament's tier.
+ * Idempotent.
  *
  *   php artisan tennis:discover-tournaments
- *   php artisan tennis:discover-tournaments --year=2027
+ *   php artisan tennis:discover-tournaments --days=90
  *
- * Designed to run unattended via the scheduler — once a day is plenty since
- * the calendar barely changes.
+ * Designed to run unattended via the scheduler. Default 60-day horizon balances
+ * coverage (catches the next major tournament) against API quota (one /info
+ * call per unique tournament id seen).
  */
 class TennisDiscoverTournaments extends Command
 {
     protected $signature = 'tennis:discover-tournaments
-                            {--year= : Season year (defaults to current year)}';
+                            {--days=60 : How many days ahead to scan for fixtures}';
     protected $description = 'Auto-discover and upsert covered tournaments from Matchstat';
 
     public function handle(MatchstatSyncService $sync): int
     {
-        $year = (int) ($this->option('year') ?: now()->year);
-        $this->info("Discovering tournaments for {$year}…");
+        $days = (int) $this->option('days');
+        $this->info("Scanning fixtures for the next {$days} days…");
 
-        $stats = $sync->syncCalendar($year);
+        $stats = $sync->syncCalendar($days);
 
         $this->table(
             ['Imported', 'Updated', 'Skipped', 'Errors'],
