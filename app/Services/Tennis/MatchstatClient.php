@@ -131,9 +131,14 @@ class MatchstatClient
     /**
      * Full season calendar — every tournament scheduled in the year, with tier
      * (Grand Slam / ATP Masters 1000 / WTA 1000 / ATP 500 / Challenger / ITF…).
+     *
+     * The API paginates with default pageSize=10 and returns only the most
+     * recent ~10 tournaments otherwise. We default to pageSize=200 which
+     * comfortably fits a full season (~200 events incl. Challengers/ITF).
      */
     public function tournamentCalendar(string $type, int $year, array $query = []): ?array
     {
+        $query = array_merge(['pageSize' => 200], $query);
         return $this->get("/tennis/v2/{$type}/tournament/calendar/{$year}", $query, self::TTL_CALENDAR);
     }
 
