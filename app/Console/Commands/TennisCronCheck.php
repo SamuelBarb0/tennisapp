@@ -58,7 +58,10 @@ class TennisCronCheck extends Command
         }
         $when = Carbon::parse($last);
         $minutes = $when->diffInMinutes(now());
-        $ok = $minutes <= 5;
+        // Hostinger shared plans only fire the system cron every 15 min, so a
+        // heartbeat up to 20 min old is still healthy. Tighten this if you move
+        // to a plan that supports per-minute crons.
+        $ok = $minutes <= 20;
         $this->row(
             'Heartbeat',
             $ok ? '✓' : '✗',

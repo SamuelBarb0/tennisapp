@@ -7,7 +7,6 @@ use App\Models\Player;
 use App\Models\TennisMatch;
 use App\Models\Tournament;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -119,6 +118,157 @@ class MatchstatSyncService
         // Collapse whitespace
         $name = preg_replace('/\s+/', ' ', trim($name));
         return $name;
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // Calendar discovery
+    // ───────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Tier identifiers we care about for predictions. Matchstat tags tournaments
+     * with a category/level field — we keep only the four big tiers: Grand Slam,
+     * ATP Masters 1000, WTA 1000, plus an explicit Grand Slam fallback by name.
+     *
+     * Returns: list of tier substrings (case-insensitive match against Matchstat's
+     * `category`/`level`/`type` fields).
+     */
+    private const COVERED_TIERS = [
+        'grand slam',
+        'masters 1000',
+        'atp masters',
+        'wta 1000',
+        'premier mandatory', // legacy WTA naming for the 1000 tier
+        'premier 5',
+    ];
+
+    /**
+     * Tournament names we always include even if the tier field is missing or
+     * unexpected. Matched as a case-insensitive substring against the API's name.
+     */
+    private const COVERED_NAMES = [
+        // Grand Slams
+        'australian open', 'roland garros', 'french open', 'wimbledon', 'us open',
+        // ATP Masters 1000
+        'indian wells', 'bnp paribas open', 'miami open', 'monte-carlo', 'monte carlo',
+        'madrid open', 'mutua madrid', 'italian open', "internazionali bnl", 'rome',
+        'canadian open', 'rogers cup', 'national bank open', 'cincinnati', 'shanghai',
+        'paris masters', 'rolex paris',
+        // WTA 1000
+        'doha', 'qatar', 'dubai', 'beijing', 'china open', 'wuhan',
+    ];
+
+    /**
+     * Pull the season calendar from Matchstat (ATP + WTA) and upsert the 23
+     * tournaments we cover into the local DB. Idempotent — safe to run daily.
+     *
+     * Returns: ['imported'=>int, 'updated'=>int, 'skipped'=>int, 'errors'=>[]]
+     */
+    public function syncCalendar(int $year): array
+    {
+        $stats = ['imported' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
+
+        foreach (['atp', 'wta'] as $type) {
+            $resp = $this->client->tournamentsBySeason($type, $year);
+            if (!$resp || !isset($resp['data'])) {
+                $stats['errors'][] = "{$type}/{$year}: empty response";
+                continue;
+            }
+
+            foreach ($resp['data'] as $row) {
+                if (!$this->isCoveredTournament($row)) {
+                    $stats['skipped']++;
+                    continue;
+                }
+
+                $apiId = $row['id'] ?? null;
+                if (!$apiId) { $stats['skipped']++; continue; }
+
+                $name = trim($row['name'] ?? 'Unknown tournament');
+                $existing = Tournament::where('matchstat_tournament_id', $apiId)->first()
+                    ?? Tournament::where('slug', Str::slug($name))->first();
+
+                $startDate = $this->parseDate($row['startDate'] ?? $row['dateStart'] ?? null);
+                $endDate   = $this->parseDate($row['endDate']   ?? $row['dateEnd']   ?? null);
+                $tierLabel = $this->resolveTierLabel($type, $row);
+
+                $attrs = [
+                    'matchstat_tournament_id' => $apiId,
+                    'matchstat_season_id'     => $row['seasonId'] ?? $year,
+                    'name'                    => $name,
+                    'type'                    => $tierLabel,
+                    'season'                  => $year,
+                    'city'                    => $row['city'] ?? $row['venue']['city'] ?? null,
+                    'country'                 => is_array($row['country'] ?? null)
+                        ? ($row['country']['name'] ?? null)
+                        : ($row['country'] ?? null),
+                    'surface'                 => $row['surface'] ?? null,
+                    'start_date'              => $startDate,
+                    'end_date'                => $endDate,
+                    'is_active'               => $endDate ? $endDate->isFuture() || $endDate->isToday() : true,
+                    'status'                  => $this->statusFromDates($startDate, $endDate),
+                ];
+
+                if ($existing) {
+                    $existing->fill($attrs)->save();
+                    $stats['updated']++;
+                } else {
+                    Tournament::create($attrs);
+                    $stats['imported']++;
+                }
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Decide whether a Matchstat tournament row falls into our 23-tournament
+     * coverage list. Matches by tier label first, then by canonical name.
+     */
+    private function isCoveredTournament(array $row): bool
+    {
+        $name = mb_strtolower($row['name'] ?? '');
+        $haystack = mb_strtolower(implode(' ', array_filter([
+            $row['category'] ?? null,
+            $row['level'] ?? null,
+            $row['type'] ?? null,
+            is_array($row['category'] ?? null) ? ($row['category']['name'] ?? null) : null,
+        ])));
+
+        foreach (self::COVERED_TIERS as $tier) {
+            if ($haystack !== '' && str_contains($haystack, $tier)) return true;
+        }
+        foreach (self::COVERED_NAMES as $needle) {
+            if ($name !== '' && str_contains($name, $needle)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Map the Matchstat row to one of our `type` labels: 'ATP Grand Slam',
+     * 'ATP Masters 1000', 'WTA Grand Slam', 'WTA 1000'. Falls back to the
+     * raw tour code if we can't classify it.
+     */
+    private function resolveTierLabel(string $type, array $row): string
+    {
+        $tour = strtoupper($type);
+        $name = mb_strtolower($row['name'] ?? '');
+        $isGrandSlam = str_contains($name, 'australian open')
+            || str_contains($name, 'roland garros')
+            || str_contains($name, 'french open')
+            || str_contains($name, 'wimbledon')
+            || str_contains($name, 'us open');
+
+        if ($isGrandSlam) return "{$tour} Grand Slam";
+        return $tour === 'WTA' ? 'WTA 1000' : 'ATP Masters 1000';
+    }
+
+    private function statusFromDates(?Carbon $start, ?Carbon $end): string
+    {
+        $now = now()->startOfDay();
+        if ($start && $now->lt($start)) return 'upcoming';
+        if ($end && $now->gt($end))    return 'finished';
+        return 'in_progress';
     }
 
     // ───────────────────────────────────────────────────────────────────────────
