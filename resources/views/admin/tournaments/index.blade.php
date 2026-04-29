@@ -18,7 +18,8 @@
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Tipo</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Fechas</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Estado</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Premium</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Acceso</th>
+                    <th class="text-center px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Home</th>
                     <th class="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Acciones</th>
                 </tr>
             </thead>
@@ -40,10 +41,21 @@
                         </span>
                     </td>
                     <td class="px-6 py-4">
-                        @if($tournament->is_premium)
-                            <span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full font-medium">Premium</span>
+                        @if($tournament->is_premium && $tournament->price > 0)
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full font-bold">
+                                ${{ number_format($tournament->price, 0, ',', '.') }} COP
+                            </span>
+                        @elseif($tournament->is_premium)
+                            <span class="px-2 py-0.5 bg-yellow-50 text-yellow-700 text-[10px] rounded-full font-bold border border-yellow-200">Premium · sin precio</span>
                         @else
-                            <span class="text-xs text-gray-400">Gratis</span>
+                            <span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">Gratis</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        @if($tournament->featured_on_home)
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-tc-accent text-tc-primary text-sm font-black" title="Destacado en home">★</span>
+                        @else
+                            <span class="text-gray-300 text-sm">·</span>
                         @endif
                     </td>
                     <td class="px-6 py-4 text-right">

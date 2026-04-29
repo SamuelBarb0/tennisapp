@@ -74,15 +74,32 @@
                 @endforeach
             </div>
         </div>
-        <div class="flex items-center gap-6">
+        <div class="flex items-center gap-6 flex-wrap">
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" name="is_premium" value="1" {{ old('is_premium') ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary">
-                <span class="text-sm">Premium</span>
+                <span class="text-sm">Premium (de pago)</span>
             </label>
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" name="is_active" value="1" {{ old('is_active', true) ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary">
                 <span class="text-sm">Activo</span>
             </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="featured_on_home" value="1" {{ old('featured_on_home') ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-accent focus:ring-tc-accent">
+                <span class="text-sm font-semibold text-tc-primary">⭐ Destacar en home (Próximo a predecir)</span>
+            </label>
+        </div>
+
+        {{-- Price (only relevant when Premium) --}}
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Precio (COP)</label>
+            <div class="flex items-center gap-2">
+                <span class="text-gray-400 font-mono">$</span>
+                <input type="number" name="price" value="{{ old('price') }}" min="0" step="100" placeholder="Ej: 15000"
+                       class="flex-1 px-4 py-2.5 bg-white border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+                <span class="text-xs text-gray-500">COP</span>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-2">Solo aplica si el torneo es <strong>Premium</strong>. Deja en blanco o 0 para gratis.</p>
+            @error('price') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
         </div>
         <div class="flex items-center gap-3 pt-2">
             <button type="submit" class="px-6 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-medium hover:bg-tc-primary-hover transition-colors">Crear torneo</button>

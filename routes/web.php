@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\PrizeController as AdminPrizeController;
 use App\Http\Controllers\Admin\RedemptionController as AdminRedemptionController;
 use App\Http\Controllers\Admin\BannerController as AdminBannerController;
+use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\SettingController as AdminSettingController;
 use App\Http\Controllers\Admin\ApiSyncController;
 use App\Http\Controllers\Admin\SimulationController;
@@ -68,6 +69,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::patch('redemptions/{redemption}', [AdminRedemptionController::class, 'updateStatus'])->name('redemptions.update');
     Route::resource('banners', AdminBannerController::class)->except('show');
     Route::patch('banners/{banner}/toggle', [AdminBannerController::class, 'toggle'])->name('banners.toggle');
+    Route::get('payments', [AdminPaymentController::class, 'index'])->name('payments.index');
     Route::get('settings', [AdminSettingController::class, 'index'])->name('settings.index');
     Route::post('settings', [AdminSettingController::class, 'update'])->name('settings.update');
 
