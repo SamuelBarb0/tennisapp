@@ -133,6 +133,10 @@
                         @if(auth()->user()->is_admin)
                             <a href="{{ route('admin.dashboard') }}" class="px-3 py-2 rounded-full text-sm font-medium text-tc-accent hover:bg-white/10 transition-colors">Admin</a>
                         @endif
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" class="px-3 py-2 rounded-full text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors">Salir</button>
+                        </form>
                     @else
                         <a href="{{ route('login') }}" class="px-4 py-2 rounded-full text-sm font-medium text-white/80 hover:text-white transition-colors">Ingresar</a>
                         <a href="{{ route('register') }}" class="px-5 py-2 bg-tc-accent text-tc-primary rounded-full text-sm font-bold hover:bg-tc-accent/90 transition-colors shadow-sm">Registrarse</a>
@@ -159,6 +163,10 @@
                     @if(auth()->user()->is_admin)
                         <a href="{{ route('admin.dashboard') }}" class="block px-4 py-2 rounded-xl text-sm font-medium text-tc-accent hover:bg-white/10">Panel Admin</a>
                     @endif
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="w-full text-left block px-4 py-2 rounded-xl text-sm font-medium text-white/80 hover:bg-white/10">Cerrar sesión</button>
+                    </form>
                 @else
                     <a href="{{ route('login') }}" class="block px-4 py-2 rounded-xl text-sm font-medium text-white/80 hover:bg-white/10">Ingresar</a>
                     <a href="{{ route('register') }}" class="block px-4 py-2 rounded-xl text-sm font-medium bg-tc-accent text-tc-primary text-center">Registrarse</a>

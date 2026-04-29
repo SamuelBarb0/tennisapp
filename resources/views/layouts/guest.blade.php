@@ -13,17 +13,17 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="bg-gray-50 antialiased">
+<body class="bg-gradient-to-br from-tc-primary via-tc-primary to-tc-primary/90 antialiased text-gray-900 font-sans min-h-screen">
     <div class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
-        <div class="mb-8">
-            <a href="{{ route('home') }}">
-                <img src="{{ asset('images/image-removebg-preview.png') }}" alt="Tennis Challenge" class="h-14">
-            </a>
-        </div>
-        <div class="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-gray-200/50 p-8 sm:p-10">
+        <a href="{{ route('home') }}" class="mb-8 transition-transform hover:scale-105">
+            <img src="{{ asset('images/image-removebg-preview.png') }}" alt="Tennis Challenge" class="h-16">
+        </a>
+
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl shadow-black/20 p-8 sm:p-10">
             {{ $slot }}
         </div>
-        <p class="mt-6 text-sm text-gray-400">&copy; {{ date('Y') }} Tennis Challenge</p>
+
+        <p class="mt-8 text-sm text-white/50">&copy; {{ date('Y') }} Tennis Challenge</p>
     </div>
 </body>
 </html>
