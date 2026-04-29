@@ -335,7 +335,7 @@
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             @foreach($tournamentRankings as $tr)
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden reveal" data-delay="{{ $trIndex * 100 }}">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden reveal" data-delay="{{ $loop->index * 100 }}">
                 <div class="bg-gradient-to-r {{ str_starts_with($tr['tournament']->type, 'ATP') ? 'from-tc-primary to-tc-primary/80' : 'from-purple-600 to-pink-500' }} px-5 py-3">
                     <a href="{{ route('tournaments.show', $tr['tournament']) }}" class="text-white font-bold text-sm hover:underline">{{ $tr['tournament']->name }}</a>
                     <div class="text-white/60 text-[10px] mt-0.5">{{ $tr['tournament']->city }}, {{ $tr['tournament']->country }}</div>
