@@ -40,8 +40,12 @@ return [
 
         'public' => [
             'driver' => 'local',
-            'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            // Hostinger blocks Apache symlinks that escape public_html, so we
+            // write directly under public_html/storage. Override via env
+            // (PUBLIC_DISK_ROOT / PUBLIC_DISK_URL) for local/dev where the
+            // standard storage:link layout works.
+            'root' => env('PUBLIC_DISK_ROOT', storage_path('app/public')),
+            'url' => env('PUBLIC_DISK_URL', rtrim(env('APP_URL', 'http://localhost'), '/').'/storage'),
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
