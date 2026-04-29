@@ -30,10 +30,18 @@ class MatchstatSyncService
     // Rankings
     // ───────────────────────────────────────────────────────────────────────────
 
-    /** Pull top-N rankings from Matchstat for ATP and WTA. Upserts into players table. */
+    /**
+     * Pull top-N rankings from Matchstat for ATP and WTA.
+     *
+     * Strategy to avoid duplicates with seeded/legacy data:
+     *   1. Try to match by matchstat_id (already linked players)
+     *   2. Fall back to name + category match (existing seed players get their
+     *      matchstat_id assigned, no duplicate is created)
+     *   3. Only as a last resort do we create a fresh row
+     */
     public function syncRankings(int $top = 200): array
     {
-        $stats = ['atp' => 0, 'wta' => 0, 'errors' => []];
+        $stats = ['atp' => 0, 'wta' => 0, 'matched' => 0, 'created' => 0, 'errors' => []];
         foreach (['atp' => 'ATP', 'wta' => 'WTA'] as $type => $category) {
             $resp = $this->client->ranking($type);
             if (!$resp || !isset($resp['data'])) {
@@ -44,19 +52,76 @@ class MatchstatSyncService
                 $p = $row['player'] ?? null;
                 if (!$p || empty($p['id'])) continue;
 
-                Player::updateOrCreate(
-                    ['matchstat_id' => $p['id']],
-                    [
-                        'name'             => $p['name'] ?? 'Unknown',
-                        'category'         => $category,
-                        'ranking'          => $row['position'] ?? null,
-                        'nationality_code' => $this->ioc3ToIso2($p['countryAcr'] ?? null),
-                    ]
-                );
+                $player = $this->resolvePlayer($p, $category);
+
+                $player->fill([
+                    'matchstat_id'     => $p['id'],
+                    'name'             => $p['name'] ?? $player->name ?? 'Unknown',
+                    'category'         => $category,
+                    'ranking'          => $row['position'] ?? null,
+                    'nationality_code' => $this->ioc3ToIso2($p['countryAcr'] ?? null) ?? $player->nationality_code,
+                ])->save();
+
+                if ($player->wasRecentlyCreated) $stats['created']++;
+                else $stats['matched']++;
                 $stats[$type]++;
             }
         }
         return $stats;
+    }
+
+    /**
+     * Find an existing Player record that corresponds to the API payload, or
+     * create a new one. Tries (in order):
+     *   1. matchstat_id (exact link)
+     *   2. exact name + category
+     *   3. case-insensitive name + category (handles "Felix Auger Aliassime" vs
+     *      "Félix Auger-Aliassime", small typos, etc.)
+     *   4. new Player()
+     */
+    private function resolvePlayer(array $apiPlayer, string $category): Player
+    {
+        // 1) Already linked
+        if ($existing = Player::where('matchstat_id', $apiPlayer['id'])->first()) {
+            return $existing;
+        }
+
+        $name = $apiPlayer['name'] ?? '';
+        if ($name === '') return new Player();
+
+        // 2) Exact name + category, prefer a row that doesn't have a different matchstat_id
+        $byName = Player::where('name', $name)
+            ->where('category', $category)
+            ->whereNull('matchstat_id')
+            ->first();
+        if ($byName) return $byName;
+
+        // 3) Loose match — strip accents/punctuation
+        $normalized = $this->normalizeName($name);
+        $loose = Player::where('category', $category)
+            ->whereNull('matchstat_id')
+            ->get()
+            ->first(fn($p) => $this->normalizeName($p->name) === $normalized);
+        if ($loose) return $loose;
+
+        // 4) New player
+        return new Player();
+    }
+
+    /**
+     * Compare-friendly form of a player name. Removes accents, hyphens, dots
+     * and lowercases.
+     */
+    private function normalizeName(string $name): string
+    {
+        $name = mb_strtolower($name);
+        // Strip accents
+        $name = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name) ?: $name;
+        // Strip non-letters
+        $name = preg_replace('/[^a-z0-9\s]/', '', $name);
+        // Collapse whitespace
+        $name = preg_replace('/\s+/', ' ', trim($name));
+        return $name;
     }
 
     // ───────────────────────────────────────────────────────────────────────────
