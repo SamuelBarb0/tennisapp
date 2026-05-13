@@ -30,13 +30,16 @@ class TennisMapBracketSlugs extends Command
 
     /**
      * Manual overrides for tournaments whose canonical name doesn't match the
-     * naive slug derivation. Keyed by `Tournament.name` (the display name we
-     * store after discovery — see ApiTennisSyncService::canonicalDisplayName).
+     * naive slug derivation. Keyed by `Tournament.name` — we accept BOTH the
+     * canonical short names (used right after discovery) AND the commercial
+     * names (after `tennis:rename-tournaments`), so this command is idempotent
+     * regardless of which order the customer runs them in.
      *
      * Each value is a list of candidate slug bases to try (in priority order),
      * without the `-{year}` suffix.
      */
     private const NAME_OVERRIDES = [
+        // Canonical short names (as discovered from api-tennis.com)
         'Roland Garros' => ['roland-garros'],
         'US Open'       => ['us-open'],
         'Miami'         => ['miami-open', 'miami'],
@@ -55,6 +58,22 @@ class TennisMapBracketSlugs extends Command
         'Indian Wells'  => ['indian-wells', 'bnp-paribas-open'],
         'Wimbledon'     => ['wimbledon'],
         'Australian Open' => ['australian-open'],
+
+        // Commercial names (after rename-tournaments)
+        'BNP Paribas Open'                       => ['indian-wells', 'bnp-paribas-open'],
+        'Miami Open'                             => ['miami-open'],
+        'Rolex Monte-Carlo Masters'              => ['rolex-monte-carlo-masters', 'monte-carlo-masters'],
+        'Mutua Madrid Open'                      => ['madrid-open', 'mutua-madrid-open'],
+        "Internazionali BNL d'Italia"            => ['internazionali-bnl-d-italia', 'internazionali-bnl-ditalia'],
+        'National Bank Open (Montreal)'          => ['national-bank-open'],
+        'National Bank Open (Toronto)'           => ['national-bank-open'],
+        'Cincinnati Open'                        => ['cincinnati-open'],
+        'Rolex Shanghai Masters'                 => ['shanghai-masters', 'shanghai-rolex-masters'],
+        'Rolex Paris Masters'                    => ['paris-masters', 'rolex-paris-masters'],
+        'Qatar TotalEnergies Open'               => ['qatar-open', 'qatar-totalenergies-open'],
+        'Dubai Duty Free Tennis Championships'   => ['dubai-duty-free-tennis-championships'],
+        'China Open'                             => ['china-open'],
+        'Wuhan Open'                             => ['wuhan-open'],
     ];
 
     public function handle(): int
