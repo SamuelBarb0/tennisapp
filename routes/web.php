@@ -85,3 +85,27 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 });
 
 require __DIR__.'/auth.php';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mail previews — only enabled in local/dev so production users can't open them.
+// Visit /preview/mail/welcome, /preview/mail/opening, etc. to inspect each
+// template with seed data.
+// ─────────────────────────────────────────────────────────────────────────────
+if (app()->environment('local')) {
+    Route::get('/preview/mail/{kind}', function (string $kind) {
+        $user = \App\Models\User::first() ?: new \App\Models\User([
+            'name' => 'Carlos', 'last_name' => 'Rodríguez',
+            'email' => 'preview@example.com',
+        ]);
+        $tournament = \App\Models\Tournament::whereNotNull('api_tournament_key')->first();
+
+        return match ($kind) {
+            'welcome'   => new \App\Mail\WelcomeMail($user),
+            'opening'   => new \App\Mail\TournamentOpeningMail($user, $tournament),
+            'countdown' => new \App\Mail\TournamentCountdownMail($user, $tournament, 6, now()->addHours(6)),
+            'predicted' => new \App\Mail\PredictionConfirmedMail($user, $tournament, 'Jannik Sinner'),
+            'closed'    => new \App\Mail\TournamentClosedMail($user, $tournament, 3, 127, 84, 12, 15, '🥉 3er lugar'),
+            default     => abort(404, 'Mail kind not found. Try: welcome, opening, countdown, predicted, closed'),
+        };
+    })->name('preview.mail');
+}

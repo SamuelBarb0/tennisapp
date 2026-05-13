@@ -53,4 +53,11 @@ return [
         'base' => env('MATCHSTAT_API_BASE', 'https://tennis-api-atp-wta-itf.p.rapidapi.com'),
     ],
 
+    // api-tennis.com — primary tennis data provider (replaces Matchstat).
+    // Provides full tournament list, ATP/WTA rankings, fixtures with player photos.
+    'api_tennis' => [
+        'key'  => env('API_TENNIS_KEY'),
+        'base' => env('API_TENNIS_BASE', 'https://api.api-tennis.com/tennis/'),
+    ],
+
 ];

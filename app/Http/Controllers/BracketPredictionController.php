@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\PredictionConfirmedMail;
 use App\Models\BracketPrediction;
+use App\Models\Player;
 use App\Models\Tournament;
 use App\Models\TennisMatch;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class BracketPredictionController extends Controller
 {
@@ -73,6 +77,29 @@ class BracketPredictionController extends Controller
                     ],
                     $attrs
                 );
+            }
+        }
+
+        // Confirmation email — send only the first time the user saves a complete
+        // bracket for this tournament (not every re-save). The "F" round with a
+        // pick at position 1 is our champion signal.
+        $champion = null;
+        if (isset($picks['F'][1])) {
+            $champion = Player::find($picks['F'][1])?->name;
+        }
+
+        $alreadyNotified = $existingRows->isNotEmpty();
+        if (!$alreadyNotified) {
+            try {
+                Mail::to(auth()->user()->email)->send(
+                    new PredictionConfirmedMail(auth()->user(), $tournament, $champion)
+                );
+            } catch (\Throwable $e) {
+                Log::warning('Prediction confirmation mail failed', [
+                    'user'       => auth()->id(),
+                    'tournament' => $tournament->id,
+                    'error'      => $e->getMessage(),
+                ]);
             }
         }
 

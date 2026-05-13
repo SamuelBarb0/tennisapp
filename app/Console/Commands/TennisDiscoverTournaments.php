@@ -3,32 +3,29 @@
 namespace App\Console\Commands;
 
 use App\Models\Setting;
-use App\Services\Tennis\MatchstatSyncService;
+use App\Services\Tennis\ApiTennisSyncService;
 use Illuminate\Console\Command;
 
 /**
- * Auto-discovers covered tournaments (Grand Slams, ATP Masters 1000, WTA 1000)
- * for a given season from Matchstat's calendar endpoint and upserts them.
+ * Auto-discovers the 23 covered tournaments (Grand Slams, ATP Masters 1000,
+ * WTA 1000) from the api-tennis.com master catalog and upserts them.
  * Idempotent.
  *
  *   php artisan tennis:discover-tournaments
- *   php artisan tennis:discover-tournaments --year=2027
  *
  * Designed to run unattended via the scheduler — once a day is plenty since
- * the calendar barely changes.
+ * the catalog barely changes.
  */
 class TennisDiscoverTournaments extends Command
 {
-    protected $signature = 'tennis:discover-tournaments
-                            {--year= : Season year (defaults to current year)}';
-    protected $description = 'Auto-discover and upsert covered tournaments from Matchstat';
+    protected $signature = 'tennis:discover-tournaments';
+    protected $description = 'Auto-discover and upsert covered tournaments from api-tennis.com';
 
-    public function handle(MatchstatSyncService $sync): int
+    public function handle(ApiTennisSyncService $sync): int
     {
-        $year = (int) ($this->option('year') ?: now()->year);
-        $this->info("Discovering tournaments for season {$year}…");
+        $this->info('Discovering covered tournaments from api-tennis.com…');
 
-        $stats = $sync->syncCalendar($year);
+        $stats = $sync->syncCalendar();
 
         $this->table(
             ['Imported', 'Updated', 'Skipped', 'Errors'],

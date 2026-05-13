@@ -71,7 +71,15 @@ class Player extends Model
             'BOL'=>'bo','DOM'=>'do','ECU'=>'ec','PER'=>'pe','PRK'=>'kp','BIH'=>'ba',
         ];
 
-        $code = strtoupper(trim($this->nationality_code ?? ''));
+        $raw = trim($this->nationality_code ?? '');
+        if ($raw === '') return 'un';
+
+        // 2-letter ISO 3166-1 alpha-2 — already what flagcdn.com expects.
+        // The newer api-tennis.com sync writes codes in this format directly.
+        if (strlen($raw) === 2) return strtolower($raw);
+
+        // 3-letter IOC or ISO alpha-3 — translate via the map.
+        $code = strtoupper($raw);
         return $map[$code] ?? 'un';
     }
 

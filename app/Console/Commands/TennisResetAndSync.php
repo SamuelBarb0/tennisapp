@@ -9,7 +9,7 @@ use App\Models\Tournament;
 use App\Models\TournamentPayment;
 use App\Models\TournamentRoundPoints;
 use App\Models\TournamentTiebreak;
-use App\Services\Tennis\MatchstatSyncService;
+use App\Services\Tennis\ApiTennisSyncService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -43,7 +43,7 @@ class TennisResetAndSync extends Command
 
     protected $description = 'Wipe legacy data and rebuild players from Matchstat (keeps test tournaments)';
 
-    public function handle(MatchstatSyncService $sync): int
+    public function handle(ApiTennisSyncService $sync): int
     {
         $this->newLine();
         $this->line('<bg=red;fg=white;options=bold> ⚠  DESTRUCTIVE OPERATION </>');
@@ -100,10 +100,10 @@ class TennisResetAndSync extends Command
             $this->line("  · Deleted {$deletedPlayers} legacy players, kept "
                 . count($survivingPlayerIds) . " referenced by test brackets / TBD");
 
-            // 5. Reset matchstat_id on the surviving players so the next sync
+            // 5. Reset api_player_key on the surviving players so the next sync
             //    can re-link them by name without unique constraint conflicts.
             Player::whereIn('id', $survivingPlayerIds)
-                ->update(['matchstat_id' => null]);
+                ->update(['api_player_key' => null]);
         });
 
         $this->info('✓ Cleanup complete.');
@@ -116,12 +116,12 @@ class TennisResetAndSync extends Command
         }
 
         $this->newLine();
-        $this->line('🌐 Pulling rankings from Matchstat...');
+        $this->line('🌐 Pulling rankings from api-tennis.com...');
 
         try {
             $stats = $sync->syncRankings(200);
         } catch (\Throwable $e) {
-            $this->error('Matchstat sync failed: ' . $e->getMessage());
+            $this->error('api-tennis.com sync failed: ' . $e->getMessage());
             $this->warn('Cleanup succeeded — you can retry with `php artisan tennis:sync-rankings`.');
             return self::FAILURE;
         }
@@ -142,7 +142,7 @@ class TennisResetAndSync extends Command
         $this->line("  · Tournaments in DB: <fg=cyan>{$totalTournaments}</> (test only)");
         $this->newLine();
         $this->line('Next steps:');
-        $this->line('  · Edit a tournament and add its <fg=yellow>matchstat_tournament_id</> to enable auto-sync');
+        $this->line('  · Run <fg=cyan>php artisan tennis:discover-tournaments</> to link the 23 covered tournaments');
         $this->line('  · Visit <fg=yellow>/admin/api-sync</> to see linked tournaments');
 
         return self::SUCCESS;

@@ -14,7 +14,7 @@ class Tournament extends Model
         'name', 'slug', 'type', 'location', 'city', 'country', 'surface',
         'start_date', 'end_date', 'is_premium', 'price', 'is_active', 'featured_on_home', 'image',
         'api_tournament_key', 'api_event_type_key', 'season', 'status', 'last_synced_at',
-        'matchstat_season_id', 'matchstat_tournament_id',
+        'matchstat_season_id', 'matchstat_tournament_id', 'tennisexplorer_slug',
     ];
 
     protected function casts(): array
@@ -52,6 +52,11 @@ class Tournament extends Model
     public function payments()
     {
         return $this->hasMany(TournamentPayment::class);
+    }
+
+    public function emailLogs()
+    {
+        return $this->hasMany(TournamentEmailLog::class);
     }
 
     /**

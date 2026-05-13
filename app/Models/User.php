@@ -11,7 +11,9 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     protected $fillable = [
-        'name', 'email', 'password', 'avatar', 'phone', 'points', 'is_admin', 'is_blocked',
+        'name', 'last_name', 'email', 'password', 'avatar',
+        'phone', 'city', 'country_code', 'birth_date',
+        'points', 'is_admin', 'is_blocked',
     ];
 
     protected $hidden = [
@@ -22,10 +24,17 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'is_admin' => 'boolean',
-            'is_blocked' => 'boolean',
+            'birth_date'        => 'date',
+            'password'          => 'hashed',
+            'is_admin'          => 'boolean',
+            'is_blocked'        => 'boolean',
         ];
+    }
+
+    /** Convenience: full name for greetings ("Carlos Rodríguez") */
+    public function getFullNameAttribute(): string
+    {
+        return trim(($this->name ?? '') . ' ' . ($this->last_name ?? ''));
     }
 
     public function predictions()

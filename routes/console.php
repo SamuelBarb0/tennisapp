@@ -42,3 +42,25 @@ Schedule::command('tennis:sync-rankings --top=200')
 Schedule::command('tennis:discover-tournaments')
     ->dailyAt('04:00')
     ->onOneServer();
+
+// Re-map bracket.tennis slugs once a year on January 1st. When a season
+// rolls over, the same tournaments get new slugs (e.g. roland-garros-2027
+// instead of -2026). --force overwrites the stale 2026 ones.
+Schedule::command('tennis:map-bracket-slugs --force')
+    ->yearlyOn(1, 1, '05:00')
+    ->onOneServer();
+
+// As a safety net: also try to map any UNMAPPED slugs every Monday. Catches
+// cases where bracket.tennis publishes a new tournament name mid-season or
+// where the early-January attempt failed because draws hadn't been published.
+Schedule::command('tennis:map-bracket-slugs')
+    ->weeklyOn(1, '05:30')
+    ->onOneServer();
+
+// Tournament email blasts (opening / countdown / closing). Idempotent — the
+// command guards against re-sending the same blast via tournament_email_log.
+// Hourly is plenty: opening goes out within an hour of the bracket being
+// ready, countdown fires inside the 24h window, closing right after the final.
+Schedule::command('tennis:send-tournament-emails')
+    ->hourly()
+    ->onOneServer();
