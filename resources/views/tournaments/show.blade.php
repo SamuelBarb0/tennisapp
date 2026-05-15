@@ -852,9 +852,19 @@
                                      :class="{ 'pk': isPickedHere('{{ $round }}', {{ $position }}, {{ $match->player1_id }}) }"
                                      @endif
                                      @endauth>
-                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player1->ranking ?? '' }}</span>
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-4 text-right shrink-0">
+                                        @if($match->player1_seed)
+                                            @if(in_array($match->player1_seed, ['Q','WC','LL','PR','SE']))
+                                                <span class="text-[7px] font-bold {{ $match->player1_seed === 'WC' ? 'text-amber-600' : 'text-tc-primary/60' }}">{{ $match->player1_seed }}</span>
+                                            @else
+                                                {{ $match->player1_seed }}
+                                            @endif
+                                        @endif
+                                    </span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
-                                    <span class="pname font-semibold truncate">{{ strtoupper($match->player1->name) }}</span>
+                                    <span class="pname font-semibold truncate">
+                                        {{ strtoupper($match->player1->name) }}@if($match->status_note === 'ret_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
+                                    </span>
                                     @if($match->score)
                                         <span class="sets">
                                             @foreach(explode(' ', $match->score) as $set)
@@ -904,9 +914,19 @@
                                      :class="{ 'pk': isPickedHere('{{ $round }}', {{ $position }}, {{ $match->player2_id }}) }"
                                      @endif
                                      @endauth>
-                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player2->ranking ?? '' }}</span>
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-4 text-right shrink-0">
+                                        @if($match->player2_seed)
+                                            @if(in_array($match->player2_seed, ['Q','WC','LL','PR','SE']))
+                                                <span class="text-[7px] font-bold {{ $match->player2_seed === 'WC' ? 'text-amber-600' : 'text-tc-primary/60' }}">{{ $match->player2_seed }}</span>
+                                            @else
+                                                {{ $match->player2_seed }}
+                                            @endif
+                                        @endif
+                                    </span>
                                     <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
-                                    <span class="pname font-semibold truncate">{{ strtoupper($match->player2->name) }}</span>
+                                    <span class="pname font-semibold truncate">
+                                        {{ strtoupper($match->player2->name) }}@if($match->status_note === 'ret_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
+                                    </span>
                                     @if($match->score)
                                         <span class="sets">
                                             @foreach(explode(' ', $match->score) as $set)
@@ -917,6 +937,9 @@
                                     @endif
                                     @if($isCancelled)
                                         <span class="text-[7px] font-bold text-gray-400 bg-gray-100 px-1 py-px rounded">CANC</span>
+                                    @endif
+                                    @if($match->status_note === 'suspended')
+                                        <span class="text-[7px] font-bold text-orange-700 bg-orange-100 px-1 py-px rounded">SUSP</span>
                                     @endif
                                     @if($pickPlayerId == $match->player2_id && !$isFinished)
                                     <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }} shrink-0">

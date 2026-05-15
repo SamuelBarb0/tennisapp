@@ -277,7 +277,23 @@ class ApiTennisSyncService
             }
         }
 
+        // If api-tennis hasn't published fixtures yet but bracket.tennis already
+        // has the draw, bootstrap the bracket from BT alone so users can start
+        // predicting ~5-7 days earlier. The api-tennis scores/winners will
+        // overlay later when fixtures appear.
         if (empty($allFixtures)) {
+            $bootstrapped = $this->bootstrapFromBracketTennis($tournament);
+            if ($bootstrapped > 0) {
+                return [
+                    'fixtures'       => 0,
+                    'main_draw'      => 0,
+                    'qualy'          => 0,
+                    'finished'       => 0,
+                    'scored'         => 0,
+                    'placeholders'   => 0,
+                    'bootstrapped'   => $bootstrapped,
+                ];
+            }
             return ['fixtures' => 0, 'updated' => 0, 'scored' => 0];
         }
 
@@ -334,14 +350,18 @@ class ApiTennisSyncService
             );
 
             $status = $this->mapStatus($f['event_status'] ?? null);
+            $winnerSide = $f['event_winner'] ?? null;
             $winnerId = null;
             if ($status === 'finished') {
-                $winnerSide = $f['event_winner'] ?? null;
                 if ($winnerSide === 'First Player')  $winnerId = $player1?->id;
                 if ($winnerSide === 'Second Player') $winnerId = $player2?->id;
             }
 
             $round = $this->mapRound($f['tournament_round'] ?? '');
+
+            // Compute status note for retirements / walkovers / suspensions.
+            // The LOSING player gets the tag (ret./wo/etc.) next to their name.
+            $statusNote = $this->computeStatusNote($f, $winnerSide);
 
             $attrs = [
                 'tournament_id'  => $tournament->id,
@@ -349,9 +369,8 @@ class ApiTennisSyncService
                 'player2_id'     => $player2?->id,
                 'round'          => $round,
                 'status'         => $status,
+                'status_note'    => $statusNote,
                 'winner_id'      => $winnerId,
-                // Prefer per-set scores ("6-3, 7-5") over set count ("2-1") so
-                // the bracket cards show real tennis scores like ATP/WTA sites.
                 'score'          => $this->formatScore($f),
                 'scheduled_at'   => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null),
             ];
@@ -476,21 +495,38 @@ class ApiTennisSyncService
         }
 
         // 1) Build surname → R128 slot map from the scraped draw.
+        //    Also keep surname → seed/Q/WC tag so we can decorate matches.
         $surnameToFirstSlot = [];
+        $surnameToSeed = [];
         foreach ($draw as $entry) {
             foreach (['p1', 'p2'] as $side) {
                 $name = $entry[$side];
                 if (!$name || strcasecmp($name, 'Bye') === 0) continue;
                 $key = BracketTennisScraper::surnameKey($name);
                 if ($key === '') continue;
-                // First slot wins (a player should only appear once in R128)
                 if (!isset($surnameToFirstSlot[$key])) {
-                    // The player occupies position 2*slot or 2*slot+1 within
-                    // the "double-the-slot" expanded view. p1 = 2*slot, p2 = 2*slot+1.
                     $expandedPos = ($entry['slot'] * 2) + ($side === 'p2' ? 1 : 0);
                     $surnameToFirstSlot[$key] = $expandedPos;
                 }
+                $seedTag = $entry[$side . '_seed'] ?? null;
+                if ($seedTag !== null && !isset($surnameToSeed[$key])) {
+                    $surnameToSeed[$key] = $seedTag;
+                }
             }
+        }
+
+        // Apply seeds to every match (winners keep their seed throughout the bracket).
+        foreach ($tournament->matches()->with(['player1', 'player2'])->get() as $m) {
+            $updates = [];
+            foreach (['player1' => 'player1_seed', 'player2' => 'player2_seed'] as $rel => $col) {
+                $p = $m->{$rel};
+                if (!$p || $p->name === 'TBD') continue;
+                $sk = BracketTennisScraper::surnameKey($p->name);
+                if (isset($surnameToSeed[$sk]) && $m->$col !== $surnameToSeed[$sk]) {
+                    $updates[$col] = $surnameToSeed[$sk];
+                }
+            }
+            if ($updates) $m->update($updates);
         }
 
         // 2) For each round in DB, place matches based on the player's
@@ -846,12 +882,93 @@ class ApiTennisSyncService
         return 'in_progress';
     }
 
+    /**
+     * Bootstrap the bracket directly from bracket.tennis when api-tennis hasn't
+     * published fixtures yet. Creates 64 R128 matches with players + seeds,
+     * leaving status='pending' and no scores. The next sync (when api-tennis
+     * fixtures arrive) overlays scores and winners on top.
+     *
+     * Returns the number of matches created.
+     */
+    private function bootstrapFromBracketTennis(Tournament $tournament): int
+    {
+        if (!$tournament->tennisexplorer_slug) return 0;
+        [$btSlug, $btTour] = $this->parseBracketTennisSlug($tournament->tennisexplorer_slug, $tournament);
+
+        $draw = $this->scraper->draw($btSlug, $btTour);
+        if (empty($draw)) return 0;
+
+        // Skip if matches already exist (idempotency)
+        if ($tournament->matches()->where('round', 'R128')->exists()) return 0;
+
+        $tbd = Player::where('name', 'TBD')->first();
+        if (!$tbd) return 0;
+
+        $created = 0;
+        $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
+        foreach ($draw as $entry) {
+            $p1 = $this->resolveBootstrapPlayer($entry['p1'], $entry['p1_country'], $tbd, $tour);
+            $p2 = $this->resolveBootstrapPlayer($entry['p2'], $entry['p2_country'], $tbd, $tour);
+            if (!$p1 || !$p2) continue;
+
+            TennisMatch::create([
+                'tournament_id'    => $tournament->id,
+                'player1_id'       => $p1->id,
+                'player2_id'       => $p2->id,
+                'player1_seed'     => $entry['p1_seed'] ?? null,
+                'player2_seed'     => $entry['p2_seed'] ?? null,
+                'round'            => 'R128',
+                'bracket_position' => $entry['slot'] + 1, // 1-indexed
+                'status'           => 'pending',
+                'scheduled_at'     => $tournament->start_date ?? now()->addDays(7),
+                'api_event_key'    => 'bt-bootstrap-r128-' . $entry['slot'] . '-' . $tournament->id,
+            ]);
+            $created++;
+        }
+
+        // Generate TBD placeholders for R64..F so the bracket renders complete.
+        $this->ensureBracketPlaceholders($tournament);
+
+        $tournament->update(['last_synced_at' => now()]);
+        return $created;
+    }
+
+    /**
+     * Find or create a Player from a bracket.tennis name + country.
+     * For "Bye" entries we return the shared TBD placeholder so the slot is
+     * visually empty (no opponent to predict against).
+     */
+    private function resolveBootstrapPlayer(?string $name, ?string $country, Player $tbd, string $tour): ?Player
+    {
+        if (!$name || strcasecmp($name, 'Bye') === 0) return $tbd;
+        $name = trim($name);
+        $slug = Str::slug($name);
+        if (!$slug) return $tbd;
+
+        $player = Player::where('slug', $slug)->first();
+        if ($player) return $player;
+
+        // Create a new player record. Country comes as ISO-3 (e.g. "ita") from
+        // bracket.tennis flags — Player::getIso2Attribute already handles 3-letter codes.
+        return Player::create([
+            'name'             => $name,
+            'slug'             => $slug,
+            'category'         => $tour,
+            'country'          => $country ? strtoupper($country) : 'Unknown',
+            'nationality_code' => $country ?: null,
+        ]);
+    }
+
     /** Loop syncTournamentLive over every active tournament with an api_tournament_key. */
     public function syncAllActive(): array
     {
         $results = [];
         $tournaments = Tournament::where('is_active', true)
             ->whereNotNull('api_tournament_key')
+            // Test tournaments use placeholder keys like 'test-roma-premium-wta-2026'
+            // that don't exist in api-tennis.com — skip them so they don't break
+            // the sync run.
+            ->where('api_tournament_key', 'NOT LIKE', 'test-%')
             ->whereIn('status', ['upcoming', 'in_progress', 'live'])
             ->get();
 
@@ -959,22 +1076,14 @@ class ApiTennisSyncService
      * single spaces ("6-3 7-5") because the bracket view parses on whitespace.
      *
      * api-tennis encodes tiebreaks as decimals (e.g. "7.12" means a 7-game
-     * set won via a 12-point tiebreak). We strip the decimal portion here —
-     * the bracket card only needs the game count, not the tiebreak score.
+     * set won via a 12-point tiebreak). We strip the decimal portion here.
      *
-     * For retirements / walkovers we append "(RET)" or "(WO)" so users
-     * understand why the score looks partial (e.g. "4-0" instead of best-of-3).
+     * The status suffix ((RET)/(WO)) lives in a SEPARATE column (`status_note`)
+     * — we no longer append it to the score so the bracket renderer can show
+     * the tag next to the losing player's name instead of muddying the score.
      */
     private function formatScore(array $fixture): ?string
     {
-        $status = mb_strtolower((string) ($fixture['event_status'] ?? ''));
-        $suffix = match (true) {
-            str_contains($status, 'retired')   => ' (RET)',
-            str_contains($status, 'walkover')  => ' (WO)',
-            str_contains($status, 'cancelled') => ' (CAN)',
-            default                            => '',
-        };
-
         $sets = $fixture['scores'] ?? null;
         if (is_array($sets) && !empty($sets)) {
             $parts = [];
@@ -984,10 +1093,35 @@ class ApiTennisSyncService
                 if ($first === null || $second === null) continue;
                 $parts[] = $first . '-' . $second;
             }
-            if (!empty($parts)) return implode(' ', $parts) . $suffix;
+            if (!empty($parts)) return implode(' ', $parts);
         }
-        $fallback = $fixture['event_final_result'] ?? null;
-        return $fallback ? $fallback . $suffix : null;
+        return $fixture['event_final_result'] ?? null;
+    }
+
+    /**
+     * Compute status_note from the API status + winner side. Tags the LOSING
+     * player so the bracket card can render "Player (ret.)" next to their name.
+     *   - Retired → "ret_p1" or "ret_p2"
+     *   - Walkover → "wo_p1" or "wo_p2"
+     *   - Suspended → "suspended" (no winner yet)
+     *   - Normal finish → null
+     */
+    private function computeStatusNote(array $fixture, ?string $winnerSide): ?string
+    {
+        $status = mb_strtolower((string) ($fixture['event_status'] ?? ''));
+        if (str_contains($status, 'suspended')) return 'suspended';
+        if (str_contains($status, 'retired')) {
+            // Loser is the side opposite to the winner
+            if ($winnerSide === 'First Player')  return 'ret_p2';
+            if ($winnerSide === 'Second Player') return 'ret_p1';
+            return 'ret_p2'; // fallback
+        }
+        if (str_contains($status, 'walkover')) {
+            if ($winnerSide === 'First Player')  return 'wo_p2';
+            if ($winnerSide === 'Second Player') return 'wo_p1';
+            return 'wo_p2';
+        }
+        return null;
     }
 
     /** Strip the tiebreak suffix from an API score ("7.12" → "7"). */
@@ -1002,11 +1136,14 @@ class ApiTennisSyncService
 
     private function mapStatus(?string $apiStatus): string
     {
-        return match (mb_strtolower((string) $apiStatus)) {
-            'finished'                                  => 'finished',
-            'walkover', 'retired', 'cancelled'          => 'finished',
-            'live', 'set 1', 'set 2', 'set 3', 'set 4', 'set 5', 'in progress' => 'live',
-            default                                     => 'pending',
+        $s = mb_strtolower((string) $apiStatus);
+        return match (true) {
+            $s === 'finished'                                  => 'finished',
+            in_array($s, ['walkover', 'retired'], true)        => 'finished',
+            str_contains($s, 'suspended')                      => 'live', // shown as live; status_note flags it
+            in_array($s, ['live', 'in progress'], true)        => 'live',
+            str_starts_with($s, 'set ')                        => 'live',
+            default                                            => 'pending',
         };
     }
 

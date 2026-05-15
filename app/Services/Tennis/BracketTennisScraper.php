@@ -82,11 +82,11 @@ class BracketTennisScraper
             $body = substr($parts[$i + 1] ?? '', 0, 3500);
 
             // Players: each renders as
-            //   <use href="...#flag-XXX"></use></svg><div...>NAME<...
-            // or with a wrapping <a> link. We use ~ as delimiter because the
-            // pattern contains literal '#'.
+            //   <use href="...#flag-XXX"></use></svg><div...>NAME[?<span...>SEED_OR_TAG</span>]<...
+            // The optional <span> contains the seed number ("1", "8", "32") or
+            // a tag ("Q" for qualifier, "WC" for wildcard).
             preg_match_all(
-                '~#flag-(\w+)[^>]*></use></svg><div[^>]*>(?:<a[^>]*>)?([^<]+?)(?:</a>)?(?:<|\?)~',
+                '~#flag-(\w+)[^>]*></use></svg><div[^>]*>(?:<a[^>]*>)?([^<]+?)(?:</a>)?\?<span[^>]*opacity-60[^>]*>([^<]*)</span>~',
                 $body,
                 $players,
                 PREG_SET_ORDER,
@@ -100,6 +100,9 @@ class BracketTennisScraper
                 'p2'          => $this->cleanName($players[1][2]),
                 'p1_country'  => $this->cleanFlag($players[0][1]),
                 'p2_country'  => $this->cleanFlag($players[1][1]),
+                // Seed/Q/WC tags ("1", "2", "Q", "WC"). Empty string = no marker.
+                'p1_seed'     => $this->cleanSeed($players[0][3] ?? ''),
+                'p2_seed'     => $this->cleanSeed($players[1][3] ?? ''),
             ];
         }
 
@@ -119,6 +122,17 @@ class BracketTennisScraper
     {
         $flag = strtolower(trim($flag));
         return ($flag === '' || $flag === 'null') ? null : $flag;
+    }
+
+    /** Normalize seed/Q/WC marker. Keeps "1"-"32" as seed digits, "Q" or "WC" as-is. */
+    private function cleanSeed(string $raw): ?string
+    {
+        $s = trim($raw);
+        if ($s === '') return null;
+        $u = strtoupper($s);
+        if (in_array($u, ['Q', 'WC', 'LL', 'PR', 'SE'], true)) return $u;
+        if (ctype_digit($s)) return $s;
+        return null;
     }
 
     /**

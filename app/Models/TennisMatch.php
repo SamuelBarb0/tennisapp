@@ -12,8 +12,9 @@ class TennisMatch extends Model
     protected $table = 'matches';
 
     protected $fillable = [
-        'tournament_id', 'player1_id', 'player2_id', 'round',
-        'bracket_position', 'scheduled_at', 'score', 'winner_id', 'status',
+        'tournament_id', 'player1_id', 'player2_id', 'player1_seed', 'player2_seed',
+        'round', 'bracket_position', 'scheduled_at', 'score', 'winner_id',
+        'status', 'status_note',
         'api_event_key', 'matchstat_match_id',
     ];
 
