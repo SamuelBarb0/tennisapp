@@ -422,18 +422,37 @@ class ApiTennisSyncService
 
         // Backfill start/end dates from the main-draw fixtures, since the
         // tournament catalog endpoint doesn't expose dates. Status follows
-        // start/end relative to today.
+        // start/end relative to today. We only consider REAL matches (not the
+        // far-future placeholders or bootstrap rows) so the dates reflect
+        // actual scheduled play.
         $dates = $tournament->matches()
             ->whereNotNull('scheduled_at')
+            ->where(function ($q) {
+                $q->whereNull('api_event_key')
+                  ->orWhere(function ($q2) {
+                      $q2->where('api_event_key', 'NOT LIKE', 'placeholder-%')
+                         ->where('api_event_key', 'NOT LIKE', 'bt-bootstrap-%');
+                  });
+            })
             ->selectRaw('MIN(scheduled_at) as first_at, MAX(scheduled_at) as last_at')
             ->first();
 
         $update = ['last_synced_at' => now()];
         if ($dates && $dates->first_at) {
-            $update['start_date'] = Carbon::parse($dates->first_at)->toDateString();
-        }
-        if ($dates && $dates->last_at) {
-            $update['end_date'] = Carbon::parse($dates->last_at)->toDateString();
+            $startDate = Carbon::parse($dates->first_at);
+            $update['start_date'] = $startDate->toDateString();
+
+            // Extend end_date to match the tournament's NATURAL duration.
+            // The observed last_at only covers rounds already scheduled; the
+            // final usually plays a few more days later. Cap by the tier:
+            //   Grand Slam = 14 days, Masters 1000 = 12 days, others = 7 days.
+            $observedEnd = Carbon::parse($dates->last_at ?? $dates->first_at);
+            $naturalDays = str_contains($tournament->type, 'Grand Slam') ? 14
+                : (str_contains($tournament->type, 'Masters 1000') || str_contains($tournament->type, 'WTA 1000') ? 12 : 7);
+            $naturalEnd = $startDate->copy()->addDays($naturalDays);
+            $update['end_date'] = $observedEnd->gt($naturalEnd)
+                ? $observedEnd->toDateString()
+                : $naturalEnd->toDateString();
         }
         if (isset($update['start_date']) && isset($update['end_date'])) {
             $update['status'] = $this->statusFromDates(

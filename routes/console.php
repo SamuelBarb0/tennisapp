@@ -43,6 +43,14 @@ Schedule::command('tennis:discover-tournaments')
     ->dailyAt('04:00')
     ->onOneServer();
 
+// Recompute tournament status every day at 03:00 UTC so finished tournaments
+// transition away from "in_progress" / "live" once their end_date has passed.
+// The live-sync only updates status when fixtures arrive — after a tournament
+// ends, no more fixtures come, so we need this separate housekeeping pass.
+Schedule::command('tennis:recompute-status')
+    ->dailyAt('03:00')
+    ->onOneServer();
+
 // Re-map bracket.tennis slugs once a year on January 1st. When a season
 // rolls over, the same tournaments get new slugs (e.g. roland-garros-2027
 // instead of -2026). --force overwrites the stale 2026 ones.
