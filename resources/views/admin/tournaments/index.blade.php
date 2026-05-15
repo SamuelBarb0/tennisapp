@@ -33,7 +33,13 @@
                     <td class="px-6 py-4">
                         <span class="px-2.5 py-1 text-xs font-medium rounded-full {{ $tournament->type === 'GrandSlam' ? 'bg-yellow-100 text-yellow-700' : (str_starts_with($tournament->type, 'ATP') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700') }}">{{ $tournament->type }}</span>
                     </td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $tournament->start_date->format('d/m/Y') }} - {{ $tournament->end_date->format('d/m/Y') }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">
+                        @if($tournament->start_date && $tournament->end_date)
+                            {{ $tournament->start_date->format('d/m/Y') }} - {{ $tournament->end_date->format('d/m/Y') }}
+                        @else
+                            <span class="text-gray-300 italic">Pendiente</span>
+                        @endif
+                    </td>
                     <td class="px-6 py-4">
                         @php $status = $tournament->status; @endphp
                         <span class="px-2.5 py-1 text-xs font-medium rounded-full {{ $status === 'live' ? 'bg-red-100 text-red-600' : ($status === 'upcoming' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500') }}">
