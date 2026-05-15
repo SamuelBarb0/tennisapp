@@ -120,6 +120,10 @@ class TournamentController extends Controller
                         $bye->player2_id = null;
                         $bye->winner_id = $r2match->player1_id;
                         $bye->bracket_position = $r2i * 2;
+                        // Carry over the player's tournament seed from the R2 match
+                        // so the BYE card shows "22" (seed) instead of falling back
+                        // to the player's world ranking.
+                        $bye->player1_seed = $r2match->player1_seed;
                         $bye->setRelation('player1', $r2match->player1);
                         $bye->setRelation('player2', null);
                         $bye->setRelation('winner', $r2match->player1);
@@ -139,6 +143,7 @@ class TournamentController extends Controller
                         $bye->player2_id = null;
                         $bye->winner_id = $r2match->player2_id;
                         $bye->bracket_position = $r2i * 2 + 1;
+                        $bye->player1_seed = $r2match->player2_seed;
                         $bye->setRelation('player1', $r2match->player2);
                         $bye->setRelation('player2', null);
                         $bye->setRelation('winner', $r2match->player2);
