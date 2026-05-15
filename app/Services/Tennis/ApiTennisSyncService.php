@@ -514,9 +514,11 @@ class ApiTennisSyncService
         }
 
         // 1) Build surname → R128 slot map from the scraped draw.
-        //    Also keep surname → seed/Q/WC tag so we can decorate matches.
+        //    Also keep surname → seed/Q/WC tag AND surname → country (ISO-3)
+        //    so we can patch missing flags from bracket.tennis as fallback.
         $surnameToFirstSlot = [];
         $surnameToSeed = [];
+        $surnameToCountry = [];
         foreach ($draw as $entry) {
             foreach (['p1', 'p2'] as $side) {
                 $name = $entry[$side];
@@ -531,10 +533,16 @@ class ApiTennisSyncService
                 if ($seedTag !== null && !isset($surnameToSeed[$key])) {
                     $surnameToSeed[$key] = $seedTag;
                 }
+                $countryTag = $entry[$side . '_country'] ?? null;
+                if ($countryTag && !isset($surnameToCountry[$key])) {
+                    $surnameToCountry[$key] = $countryTag;
+                }
             }
         }
 
-        // Apply seeds to every match (winners keep their seed throughout the bracket).
+        // Apply seeds to every match (winners keep their seed throughout the
+        // bracket). Also patch missing player country/flag from bracket.tennis
+        // when the api-tennis data didn't provide it (e.g. Townsend, Kessler).
         foreach ($tournament->matches()->with(['player1', 'player2'])->get() as $m) {
             $updates = [];
             foreach (['player1' => 'player1_seed', 'player2' => 'player2_seed'] as $rel => $col) {
@@ -543,6 +551,11 @@ class ApiTennisSyncService
                 $sk = BracketTennisScraper::surnameKey($p->name);
                 if (isset($surnameToSeed[$sk]) && $m->$col !== $surnameToSeed[$sk]) {
                     $updates[$col] = $surnameToSeed[$sk];
+                }
+                // Backfill country from BT if missing or "Unknown"
+                if (isset($surnameToCountry[$sk]) && (!$p->nationality_code || $p->country === 'Unknown' || $p->iso2 === 'un')) {
+                    $iso3 = strtoupper($surnameToCountry[$sk]);
+                    $p->update(['nationality_code' => $iso3, 'country' => $p->country === 'Unknown' || !$p->country ? $iso3 : $p->country]);
                 }
             }
             if ($updates) $m->update($updates);
