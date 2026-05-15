@@ -18,10 +18,11 @@ class HomeController extends Controller
         $banners = Banner::active()->take(3)->get();
 
         // "Próximos torneos a predecir": the admin opts in via featured_on_home.
-        // If admin hasn't featured anything yet, fall back to the nearest upcoming
-        // tournament so the page never looks empty.
+        // We exclude finished tournaments so completed events (e.g. Madrid
+        // after it ends) stop appearing in the "next up" section.
         $featuredTournaments = Tournament::where('is_active', true)
             ->where('featured_on_home', true)
+            ->where('status', '!=', 'finished')
             ->whereHas('matches')
             ->withCount(['matches as pending_matches_count' => function ($q) {
                 $q->where('status', 'pending');
@@ -31,6 +32,7 @@ class HomeController extends Controller
 
         if ($featuredTournaments->isEmpty()) {
             $featuredTournaments = Tournament::where('is_active', true)
+                ->where('status', '!=', 'finished')
                 ->where('start_date', '>=', '2026-01-01')
                 ->whereHas('matches')
                 ->withCount(['matches as pending_matches_count' => function ($q) {
@@ -45,9 +47,10 @@ class HomeController extends Controller
         // Backwards-compat for sections still expecting nextTournament
         $nextTournament = $featuredTournaments->first();
 
-        // Próximos torneos (con partidos, excluyendo los destacados)
+        // Próximos torneos (con partidos, excluyendo los destacados Y los terminados)
         $featuredIds = $featuredTournaments->pluck('id')->all();
         $upcomingTournaments = Tournament::where('is_active', true)
+            ->where('status', '!=', 'finished')
             ->where('start_date', '>=', '2026-01-01')
             ->where('end_date', '>=', now()->subDays(7))
             ->whereHas('matches')
