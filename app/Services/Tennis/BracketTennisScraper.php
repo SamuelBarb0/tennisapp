@@ -81,28 +81,43 @@ class BracketTennisScraper
 
             $body = substr($parts[$i + 1] ?? '', 0, 3500);
 
-            // Players: each renders as
-            //   <use href="...#flag-XXX"></use></svg><div...>NAME[?<span...>SEED_OR_TAG</span>]<...
-            // The optional <span> contains the seed number ("1", "8", "32") or
-            // a tag ("Q" for qualifier, "WC" for wildcard).
+            // Each player block looks like:
+            //   <use href="...#flag-XXX"></use></svg><div...>NAME...
+            // followed (sometimes) by a <span...opacity-60>SEED|Q|WC</span>.
+            //
+            // We do this in two passes: first capture (flag, name), then look
+            // BACKWARDS from each player's position for the optional seed span.
             preg_match_all(
-                '~#flag-(\w+)[^>]*></use></svg><div[^>]*>(?:<a[^>]*>)?([^<]+?)(?:</a>)?\?<span[^>]*opacity-60[^>]*>([^<]*)</span>~',
+                '~#flag-(\w+)[^>]*></use></svg><div[^>]*>(?:<a[^>]*>)?([^<]+?)(?:</a>)?(?:<|$)~',
                 $body,
                 $players,
-                PREG_SET_ORDER,
+                PREG_SET_ORDER | PREG_OFFSET_CAPTURE,
             );
 
             if (count($players) < 2) continue;
 
+            // For each player, peek up to 200 chars ahead for a seed span
+            // BEFORE the next #flag-... marker.
+            $seeds = [];
+            foreach ($players as $idx => $p) {
+                $matchEnd = $p[0][1] + strlen($p[0][0]);
+                $nextStart = $idx + 1 < count($players) ? $players[$idx + 1][0][1] : strlen($body);
+                $window = substr($body, $matchEnd, min(300, $nextStart - $matchEnd));
+                if (preg_match('~<span[^>]*opacity-60[^>]*>([^<]+)</span>~', $window, $sm)) {
+                    $seeds[$idx] = trim($sm[1]);
+                } else {
+                    $seeds[$idx] = '';
+                }
+            }
+
             $matches[] = [
                 'slot'        => $slot,
-                'p1'          => $this->cleanName($players[0][2]),
-                'p2'          => $this->cleanName($players[1][2]),
-                'p1_country'  => $this->cleanFlag($players[0][1]),
-                'p2_country'  => $this->cleanFlag($players[1][1]),
-                // Seed/Q/WC tags ("1", "2", "Q", "WC"). Empty string = no marker.
-                'p1_seed'     => $this->cleanSeed($players[0][3] ?? ''),
-                'p2_seed'     => $this->cleanSeed($players[1][3] ?? ''),
+                'p1'          => $this->cleanName($players[0][2][0]),
+                'p2'          => $this->cleanName($players[1][2][0]),
+                'p1_country'  => $this->cleanFlag($players[0][1][0]),
+                'p2_country'  => $this->cleanFlag($players[1][1][0]),
+                'p1_seed'     => $this->cleanSeed($seeds[0] ?? ''),
+                'p2_seed'     => $this->cleanSeed($seeds[1] ?? ''),
             ];
         }
 

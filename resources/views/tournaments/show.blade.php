@@ -761,7 +761,17 @@
                         <div class="px-1" style="position:absolute; width:100%; transform:translateY(-50%); top:{{ $centerPx }}px;">
                             <div class="bye-card">
                                 <div class="pr n" style="opacity:0.55;">
-                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0">{{ $match->player1->ranking ?? '' }}</span>
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-5 text-right shrink-0">
+                                        @if($match->player1_seed)
+                                            @if(in_array($match->player1_seed, ['Q','WC','LL','PR','SE']))
+                                                <span class="text-[7px] font-bold {{ $match->player1_seed === 'WC' ? 'text-amber-600' : 'text-tc-primary/60' }}">{{ $match->player1_seed }}</span>
+                                            @else
+                                                {{ $match->player1_seed }}
+                                            @endif
+                                        @elseif($match->player1->ranking)
+                                            <span class="text-[7px] font-normal text-gray-400">{{ $match->player1->ranking }}</span>
+                                        @endif
+                                    </span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
                                     <span class="font-semibold truncate flex-1">{{ strtoupper($match->player1->name) }}</span>
                                 </div>
@@ -852,13 +862,16 @@
                                      :class="{ 'pk': isPickedHere('{{ $round }}', {{ $position }}, {{ $match->player1_id }}) }"
                                      @endif
                                      @endauth>
-                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-4 text-right shrink-0">
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-5 text-right shrink-0">
                                         @if($match->player1_seed)
                                             @if(in_array($match->player1_seed, ['Q','WC','LL','PR','SE']))
                                                 <span class="text-[7px] font-bold {{ $match->player1_seed === 'WC' ? 'text-amber-600' : 'text-tc-primary/60' }}">{{ $match->player1_seed }}</span>
                                             @else
                                                 {{ $match->player1_seed }}
                                             @endif
+                                        @elseif($match->player1->ranking)
+                                            {{-- Fallback: mostrar ranking ATP/WTA mundial cuando no hay seed del torneo --}}
+                                            <span class="text-[7px] font-normal text-gray-400">{{ $match->player1->ranking }}</span>
                                         @endif
                                     </span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
@@ -914,13 +927,15 @@
                                      :class="{ 'pk': isPickedHere('{{ $round }}', {{ $position }}, {{ $match->player2_id }}) }"
                                      @endif
                                      @endauth>
-                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-4 text-right shrink-0">
+                                    <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-5 text-right shrink-0">
                                         @if($match->player2_seed)
                                             @if(in_array($match->player2_seed, ['Q','WC','LL','PR','SE']))
                                                 <span class="text-[7px] font-bold {{ $match->player2_seed === 'WC' ? 'text-amber-600' : 'text-tc-primary/60' }}">{{ $match->player2_seed }}</span>
                                             @else
                                                 {{ $match->player2_seed }}
                                             @endif
+                                        @elseif($match->player2->ranking)
+                                            <span class="text-[7px] font-normal text-gray-400">{{ $match->player2->ranking }}</span>
                                         @endif
                                     </span>
                                     <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
