@@ -876,16 +876,21 @@ class ApiTennisSyncService
                 while (in_array(++$position, $usedPositions, true)) {
                     // skip
                 }
-                TennisMatch::create([
-                    'tournament_id'    => $tournament->id,
-                    'player1_id'       => $tbd->id,
-                    'player2_id'       => $tbd->id,
-                    'round'            => $round,
-                    'bracket_position' => $position,
-                    'status'           => 'pending',
-                    'scheduled_at'     => now()->addYears(1),
-                    'api_event_key'    => 'placeholder-' . $round . '-' . $position . '-' . $tournament->id,
-                ]);
+                // Use updateOrCreate so stale placeholders from a previous run
+                // that survived the delete (e.g. race with the live-sync cron)
+                // get overwritten instead of triggering a unique-constraint error.
+                TennisMatch::updateOrCreate(
+                    ['api_event_key' => 'placeholder-' . $round . '-' . $position . '-' . $tournament->id],
+                    [
+                        'tournament_id'    => $tournament->id,
+                        'player1_id'       => $tbd->id,
+                        'player2_id'       => $tbd->id,
+                        'round'            => $round,
+                        'bracket_position' => $position,
+                        'status'           => 'pending',
+                        'scheduled_at'     => now()->addYears(1),
+                    ]
+                );
                 $created++;
             }
         }
