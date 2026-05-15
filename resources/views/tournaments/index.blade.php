@@ -117,7 +117,11 @@
                         </div>
                     </div>
                     <div class="hidden md:flex shrink-0 items-center gap-2">
-                        @if($state === 'live')
+                        @if($tournament->status === 'finished')
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-200 text-gray-600 text-[11px] font-bold rounded-full">
+                                FINALIZADO
+                            </span>
+                        @elseif($state === 'live')
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 text-[11px] font-bold rounded-full">
                                 <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>EN VIVO
                             </span>

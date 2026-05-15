@@ -543,6 +543,11 @@ class ApiTennisSyncService
         // Apply seeds to every match (winners keep their seed throughout the
         // bracket). Also patch missing player country/flag from bracket.tennis
         // when the api-tennis data didn't provide it (e.g. Townsend, Kessler).
+        //
+        // For seeds that DON'T appear in any R128 match (they had a bye in the
+        // first round), we ALSO patch their seed on every other-round match
+        // where they show up — that way the bracket displays their tournament
+        // seed everywhere, not the world ranking fallback.
         foreach ($tournament->matches()->with(['player1', 'player2'])->get() as $m) {
             $updates = [];
             foreach (['player1' => 'player1_seed', 'player2' => 'player2_seed'] as $rel => $col) {
@@ -559,6 +564,33 @@ class ApiTennisSyncService
                 }
             }
             if ($updates) $m->update($updates);
+        }
+
+        // For seeded players who got a bye in R128 (no real match there), make
+        // sure their seed is also exposed on the Player row so any view that
+        // falls back to `player.ranking` for a BYE card can prefer the seed.
+        // We store the seed in a transient attribute that views can read.
+        foreach ($surnameToSeed as $surname => $seed) {
+            if (!is_numeric($seed)) continue; // Q/WC/LL handled per-match
+            $player = Player::all()->first(fn($p) => BracketTennisScraper::surnameKey($p->name) === $surname);
+            if (!$player) continue;
+            // We only update if the player has no seed-bound match in R128
+            // (i.e. they had a bye and skip straight to R64).
+            $hasR128 = $tournament->matches()
+                ->where('round', 'R128')
+                ->where(function ($q) use ($player) {
+                    $q->where('player1_id', $player->id)
+                      ->orWhere('player2_id', $player->id);
+                })
+                ->exists();
+            if (!$hasR128) {
+                // Apply seed to any BYE-status match where this player is alone
+                // (e.g. Kalinskaya having a bye represented as a status=bye row).
+                $tournament->matches()
+                    ->where('status', 'bye')
+                    ->where('player1_id', $player->id)
+                    ->update(['player1_seed' => $seed]);
+            }
         }
 
         // 2) For each round in DB, place matches based on the player's
