@@ -30,10 +30,29 @@ class TournamentController extends Controller
 
         $tournaments = $query->orderBy('start_date')->get();
 
+        // Group ATP+WTA siblings into a single row per family (same logic as
+        // the home cards) so the calendar shows one entry per real event.
+        $tournaments = $this->groupByFamily($tournaments);
+
         // Group by month for the calendar layout
-        $tournamentsByMonth = $tournaments->groupBy(fn($t) => $t->start_date->format('Y-m'));
+        $tournamentsByMonth = $tournaments->groupBy(fn($t) => $t->start_date ? $t->start_date->format('Y-m') : '0000-00');
 
         return view('tournaments.index', compact('tournaments', 'tournamentsByMonth'));
+    }
+
+    private function groupByFamily(\Illuminate\Support\Collection $tournaments): \Illuminate\Support\Collection
+    {
+        [$withFamily, $solo] = $tournaments->partition(fn($t) => !empty($t->family_slug));
+        $grouped = $withFamily->groupBy('family_slug')->map(function ($siblings) {
+            $primary = $siblings->sortBy(fn($t) =>
+                str_starts_with($t->type, 'ATP') ? 0
+                    : (str_starts_with($t->type, 'WTA') ? 1 : 2)
+            )->first();
+            $primary->setAttribute('family_tours', $siblings->map(fn($t) => $t->tour_code)->unique()->values()->all());
+            $primary->setAttribute('family_ids', $siblings->pluck('id')->all());
+            return $primary;
+        })->values();
+        return $grouped->merge($solo)->sortBy('start_date')->values();
     }
 
     public function show(Tournament $tournament, Request $request)

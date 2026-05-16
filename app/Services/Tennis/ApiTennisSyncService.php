@@ -165,6 +165,10 @@ class ApiTennisSyncService
                 $tier = $entry['tier'] === 'Grand Slam' ? "{$tour} Grand Slam" : $entry['tier'];
                 $name = $this->canonicalDisplayName($entry['needle'], $tour);
                 $slug = Str::slug($name) . '-' . strtolower($tour);
+                // Family slug groups ATP+WTA of the same event into one card.
+                // We derive it from the canonical name (no tour suffix) + year.
+                $year = now()->year;
+                $familySlug = Str::slug($this->canonicalDisplayName($entry['needle'], 'ATP')) . '-' . $year;
 
                 $existing = Tournament::where('api_tournament_key', (string) $best['tournament_key'])->first()
                     ?? Tournament::where('slug', $slug)->first();
@@ -173,8 +177,9 @@ class ApiTennisSyncService
                     'api_tournament_key' => (string) $best['tournament_key'],
                     'name'               => $name,
                     'slug'               => $slug,
+                    'family_slug'        => $familySlug,
                     'type'               => $tier,
-                    'season'             => now()->year,
+                    'season'             => $year,
                     'is_active'          => true,
                 ];
 

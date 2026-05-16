@@ -464,6 +464,29 @@
 
 <div class="bg-gradient-to-b from-gray-50 to-gray-100/60 min-h-[60vh]">
 
+    {{-- ═══════ TABS ATP/WTA (only when tournament has siblings) ═══════ --}}
+    @php
+        $siblings = $tournament->siblings()->where('is_active', true)->get();
+    @endphp
+    @if($siblings->isNotEmpty())
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        <div class="inline-flex bg-white border border-gray-200 rounded-full p-1 shadow-sm">
+            <a href="{{ route('tournaments.show', $tournament) }}"
+               class="px-5 py-2 rounded-full text-sm font-bold transition-all
+                      bg-tc-primary text-white shadow">
+                {{ $tournament->tour_code }} · Bracket
+            </a>
+            @foreach($siblings as $sibling)
+            <a href="{{ route('tournaments.show', $sibling) }}"
+               class="px-5 py-2 rounded-full text-sm font-bold transition-all
+                      text-gray-600 hover:bg-gray-100">
+                {{ $sibling->tour_code }} · Bracket
+            </a>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
     @if($needsPayment ?? false)
     {{-- ═══════ PAYWALL ═══════ --}}
     <div class="max-w-2xl mx-auto px-4 sm:px-6 py-12">

@@ -11,7 +11,7 @@ class Tournament extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'slug', 'type', 'location', 'city', 'country', 'surface',
+        'name', 'slug', 'family_slug', 'type', 'location', 'city', 'country', 'surface',
         'start_date', 'end_date', 'is_premium', 'price', 'is_active', 'featured_on_home', 'image',
         'api_tournament_key', 'api_event_type_key', 'season', 'status', 'last_synced_at',
         'matchstat_season_id', 'matchstat_tournament_id', 'tennisexplorer_slug',
@@ -60,6 +60,40 @@ class Tournament extends Model
     }
 
     /**
+     * Sibling tournaments — same event, different tour (ATP / WTA).
+     * Returns ONLY the other tournament(s) in the family, not this one.
+     */
+    public function siblings()
+    {
+        if (!$this->family_slug) {
+            return Tournament::query()->whereRaw('1 = 0'); // empty
+        }
+        return Tournament::where('family_slug', $this->family_slug)
+            ->where('id', '!=', $this->id);
+    }
+
+    /** All tournaments in the family (this + siblings). */
+    public function family()
+    {
+        if (!$this->family_slug) {
+            return Tournament::where('id', $this->id);
+        }
+        return Tournament::where('family_slug', $this->family_slug);
+    }
+
+    /**
+     * The "tour" label used by the tabs in the unified view.
+     * Returns 'ATP' for any ATP-typed tournament, 'WTA' for WTA, 'GS' for
+     * mixed (Grand Slams when the row isn't tagged by tour).
+     */
+    public function getTourCodeAttribute(): string
+    {
+        if (str_starts_with($this->type, 'WTA')) return 'WTA';
+        if (str_starts_with($this->type, 'ATP')) return 'ATP';
+        return 'GS';
+    }
+
+    /**
      * True when this tournament requires payment to predict.
      * Free tournaments (is_premium=false OR price not set) never require payment.
      */
@@ -69,15 +103,22 @@ class Tournament extends Model
     }
 
     /**
-     * True if the user has an approved payment for this tournament. Free tournaments
-     * always return true (no gate).
+     * True if the user has an approved payment for this tournament OR for any
+     * tournament in the same family. Free tournaments always return true.
+     *
+     * Paying for ATP Roma also unlocks WTA Roma (and vice versa) because the
+     * customer's pricing model is one payment per family.
      */
     public function hasUserPaid(?int $userId): bool
     {
         if (!$this->requiresPayment()) return true;
         if (!$userId) return false;
 
-        return $this->payments()
+        $familyTournamentIds = $this->family_slug
+            ? Tournament::where('family_slug', $this->family_slug)->pluck('id')
+            : collect([$this->id]);
+
+        return TournamentPayment::whereIn('tournament_id', $familyTournamentIds)
             ->where('user_id', $userId)
             ->where('status', 'approved')
             ->exists();

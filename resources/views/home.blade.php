@@ -177,11 +177,22 @@
                         {{ $ft->city }}{{ $ft->country ? ', ' . $ft->country : '' }}
                     </p>
                     @endif
-                    <div class="flex flex-wrap gap-3 mb-5">
-                        <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $ft->start_date->format('d M') }} - {{ $ft->end_date->format('d M, Y') }}</span>
+                    <div class="flex flex-wrap gap-2 mb-5 items-center">
+                        @if($ft->start_date && $ft->end_date)
+                            <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $ft->start_date->format('d M') }} - {{ $ft->end_date->format('d M, Y') }}</span>
+                        @endif
                         @if($ft->surface)
                         <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $ft->surface }}</span>
                         @endif
+                        {{-- Tour chips: muestra ATP / WTA cuando la familia tiene ambos --}}
+                        @foreach(($ft->family_tours ?? [$ft->tour_code]) as $tourCode)
+                            <span class="text-xs font-bold px-2.5 py-1 rounded-full
+                                {{ $tourCode === 'ATP' ? 'bg-blue-100 text-blue-700' : '' }}
+                                {{ $tourCode === 'WTA' ? 'bg-pink-100 text-pink-700' : '' }}
+                                {{ $tourCode === 'GS' ? 'bg-yellow-100 text-yellow-800' : '' }}">
+                                {{ $tourCode }}
+                            </span>
+                        @endforeach
                     </div>
                     @if($state === 'open')
                     <div class="flex items-center gap-2 text-sm text-gray-500 mb-6">
