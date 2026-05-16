@@ -83,7 +83,7 @@
                 <div class="text-[10px] text-gray-400 flex items-center gap-2">
                     <span>{{ $t->city }}</span>
                     <span class="text-gray-300">·</span>
-                    <span>{{ $t->start_date->format('d M') }}</span>
+                    <span>{{ $t->start_date?->format('d M') ?? 'Sin fecha' }}</span>
                 </div>
             </div>
             {{-- Progress --}}
