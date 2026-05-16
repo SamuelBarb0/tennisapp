@@ -180,6 +180,8 @@
                     <div class="flex flex-wrap gap-2 mb-5 items-center">
                         @if($ft->start_date && $ft->end_date)
                             <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $ft->start_date->format('d M') }} - {{ $ft->end_date->format('d M, Y') }}</span>
+                        @else
+                            <span class="text-sm text-gray-400 italic px-3 py-1 rounded-lg">Fecha por confirmar</span>
                         @endif
                         @if($ft->surface)
                         <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">{{ $ft->surface }}</span>
@@ -323,7 +325,13 @@
                 </p>
                 @endif
                 <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                    <span class="text-xs text-gray-400">{{ $tournament->start_date->format('d M') }} - {{ $tournament->end_date->format('d M') }}</span>
+                    <span class="text-xs text-gray-400">
+                        @if($tournament->start_date && $tournament->end_date)
+                            {{ $tournament->start_date->format('d M') }} - {{ $tournament->end_date->format('d M') }}
+                        @else
+                            Pendiente
+                        @endif
+                    </span>
                     <span class="text-xs font-medium px-2 py-0.5 bg-gray-100 rounded-lg">{{ $tournament->surface ?? $tournament->type }}</span>
                 </div>
             </div>

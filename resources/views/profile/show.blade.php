@@ -190,7 +190,13 @@
                             @endif
                         </div>
                         <h3 class="font-bold text-sm text-gray-800 truncate group-hover:text-tc-primary transition">{{ $t->name }}</h3>
-                        <p class="text-[10px] text-gray-400 mt-0.5">{{ $t->start_date->format('d M') }} – {{ $t->end_date->format('d M, Y') }}</p>
+                        <p class="text-[10px] text-gray-400 mt-0.5">
+                            @if($t->start_date && $t->end_date)
+                                {{ $t->start_date->format('d M') }} – {{ $t->end_date->format('d M, Y') }}
+                            @else
+                                Fecha por confirmar
+                            @endif
+                        </p>
                     </div>
                 </div>
 

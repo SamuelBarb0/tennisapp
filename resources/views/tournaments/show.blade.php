@@ -315,7 +315,11 @@
                     <span class="text-[11px] font-medium" style="color: rgba(255,255,255,0.6);">{{ $tournament->city }}, {{ $tournament->country }}</span>
                     <span class="w-1 h-1 rounded-full" style="background: rgba(255,255,255,0.2);"></span>
                     <span class="text-[11px] font-medium" style="color: rgba(255,255,255,0.6);">
-                        {{ $tournament->start_date->format('d M') }} – {{ $tournament->end_date->format('d M Y') }}
+                        @if($tournament->start_date && $tournament->end_date)
+                            {{ $tournament->start_date->format('d M') }} – {{ $tournament->end_date->format('d M Y') }}
+                        @else
+                            Fecha por confirmar
+                        @endif
                     </span>
                     @if($tournament->surface)
                     <span class="w-1 h-1 rounded-full" style="background: rgba(255,255,255,0.2);"></span>

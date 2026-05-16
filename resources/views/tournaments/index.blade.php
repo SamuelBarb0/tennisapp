@@ -82,9 +82,14 @@
             <a href="{{ route('tournaments.show', $tournament) }}" class="flex items-stretch hover:bg-gray-50 transition group">
                 {{-- Date column --}}
                 <div class="w-20 sm:w-28 shrink-0 bg-gradient-to-br {{ $tournament->type === 'GrandSlam' ? 'from-yellow-400 to-orange-500' : (str_starts_with($tournament->type, 'ATP') ? 'from-tc-primary to-blue-700' : 'from-purple-500 to-pink-500') }} text-white flex flex-col items-center justify-center p-3">
-                    <div class="text-[9px] font-bold uppercase tracking-widest opacity-80">{{ $monthNamesEs[$tournament->start_date->format('m')] ?? '' }}</div>
-                    <div class="text-2xl sm:text-3xl font-black leading-none mt-0.5">{{ $tournament->start_date->format('d') }}</div>
-                    <div class="text-[9px] opacity-70 mt-1">→ {{ $tournament->end_date->format('d') }}</div>
+                    @if($tournament->start_date)
+                        <div class="text-[9px] font-bold uppercase tracking-widest opacity-80">{{ $monthNamesEs[$tournament->start_date->format('m')] ?? '' }}</div>
+                        <div class="text-2xl sm:text-3xl font-black leading-none mt-0.5">{{ $tournament->start_date->format('d') }}</div>
+                        <div class="text-[9px] opacity-70 mt-1">→ {{ $tournament->end_date?->format('d') ?? '?' }}</div>
+                    @else
+                        <div class="text-[9px] font-bold uppercase tracking-widest opacity-80">TBD</div>
+                        <div class="text-base font-bold leading-none mt-0.5">--</div>
+                    @endif
                 </div>
 
                 {{-- Tournament image (optional) --}}
