@@ -57,15 +57,25 @@
 
 @section('content')
 
+@php
+    $prizesHero = \App\Models\Banner::forSlot('prizes_hero');
+@endphp
+
 {{-- Hero Premios --}}
 <div class="prizes-hero relative overflow-hidden">
+    @if($prizesHero->image_url)
+    <div class="absolute inset-0">
+        <img src="{{ $prizesHero->image_url }}" alt="" class="w-full h-full object-cover opacity-30">
+        <div class="absolute inset-0 bg-gradient-to-br from-tc-primary/80 via-tc-primary-hover/70 to-tc-primary-dark/80"></div>
+    </div>
+    @endif
     <div class="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-12 text-center fade-in">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-tc-accent/10 border border-tc-accent/20 mb-4">
             <svg class="w-3.5 h-3.5 text-tc-accent" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
             <span class="text-tc-accent text-[10px] font-bold uppercase tracking-widest">Tienda de premios</span>
         </div>
-        <h1 class="text-3xl md:text-5xl font-black text-white tracking-tight mb-2">Canjea tus puntos</h1>
-        <p class="text-white/40 text-sm">Gana prediciendo torneos y canjea tus puntos por premios exclusivos</p>
+        <h1 class="text-3xl md:text-5xl font-black text-white tracking-tight mb-2">{{ $prizesHero->title ?: 'Canjea tus puntos' }}</h1>
+        <p class="text-white/40 text-sm">{{ $prizesHero->subtitle ?: 'Gana prediciendo torneos y canjea tus puntos por premios exclusivos' }}</p>
         @auth
         <div class="mt-5 inline-flex items-center gap-3 px-5 py-2.5 bg-tc-accent/10 border border-tc-accent/25 rounded-full glow-gold">
             <svg class="w-4 h-4 text-tc-accent" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>

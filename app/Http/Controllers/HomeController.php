@@ -14,10 +14,19 @@ class HomeController extends Controller
 {
     public function index()
     {
-        // The "hero" banner (if any) replaces the hardcoded slide 0 in the home
-        // carousel. The remaining active banners follow it as slides 1..N.
-        $heroBanner = Banner::where('is_active', true)->where('is_hero', true)->first();
-        $banners = Banner::active()->where('is_hero', false)->take(3)->get();
+        // The "hero" banner (slot=home_hero) replaces the hardcoded slide 0 in
+        // the home carousel — its title/subtitle/image flow into the existing
+        // hero section via the `home_hero` lookup in the view itself.
+        $heroBanner = Banner::where('is_active', true)
+            ->where('slot', 'home_hero')
+            ->first();
+        // Slides 1..N come from the home_carousel slot. We keep the legacy
+        // is_hero=false filter so any pre-slot data still works during rollout.
+        $banners = Banner::active()
+            ->where('slot', 'home_carousel')
+            ->where('is_hero', false)
+            ->take(3)
+            ->get();
 
         // "Próximos torneos a predecir": the admin opts in via featured_on_home.
         // We exclude finished tournaments so completed events (e.g. Madrid

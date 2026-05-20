@@ -12,6 +12,16 @@
         @csrf
         @method('PUT')
         <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Ubicación</label>
+            <select name="slot" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+                @foreach(\App\Models\Banner::SLOTS as $slotKey => $slotCfg)
+                    <option value="{{ $slotKey }}" {{ old('slot', $banner->slot) === $slotKey ? 'selected' : '' }}>{{ $slotCfg['label'] }}</option>
+                @endforeach
+            </select>
+            <p class="text-[11px] text-gray-400 mt-1">Define dónde se mostrará este banner en el sitio público.</p>
+            @error('slot') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
+        </div>
+        <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">Título</label>
             <input type="text" name="title" value="{{ old('title', $banner->title) }}" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none transition-all">
             @error('title') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
@@ -62,17 +72,10 @@
             <p class="text-[11px] text-gray-400 mt-1">Si se llena, se usa esta URL en lugar del archivo subido.</p>
             @error('media_url') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
         </div>
-        <div class="space-y-2">
+        <div>
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" name="is_active" value="1" {{ old('is_active', $banner->is_active) ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary">
                 <span class="text-sm">Activo</span>
-            </label>
-            <label class="flex items-start gap-2 cursor-pointer">
-                <input type="checkbox" name="is_hero" value="1" {{ old('is_hero', $banner->is_hero) ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary mt-0.5">
-                <span class="text-sm">
-                    <span class="font-medium">Banner principal (Hero)</span>
-                    <span class="block text-[11px] text-gray-500">Reemplaza el slide inicial "Predice. Compite. Gana." del home. Solo un banner puede ser el hero a la vez.</span>
-                </span>
             </label>
         </div>
         <div class="flex items-center gap-3 pt-2">

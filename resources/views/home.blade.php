@@ -7,6 +7,8 @@
 @php
     // Total slides = 1 hero default + N banners. Hero is always slide 0.
     $totalSlides = 1 + $banners->count();
+    // Editable hero text/image — managed from /admin/banners (slot home_hero).
+    $homeHero = \App\Models\Banner::forSlot('home_hero');
 @endphp
 <section class="bg-tc-primary"
          x-data="{
@@ -62,13 +64,28 @@
                     <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
                     <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
 
+                    @if($homeHero->image_url)
+                        {{-- Optional background image overlay when admin uploaded one. --}}
+                        <div class="absolute inset-0">
+                            <img src="{{ $homeHero->image_url }}" alt="" class="w-full h-full object-cover opacity-40">
+                            <div class="absolute inset-0 bg-gradient-to-br from-tc-primary/80 via-tc-primary-hover/70 to-tc-primary-dark/80"></div>
+                        </div>
+                    @endif
                     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20 relative">
                         <div class="text-center fade-in">
                             <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
-                                Predice. Compite. <span class="text-tc-accent">Gana.</span>
+                                {{-- Highlight the last word in tc-accent yellow so the customized title
+                                     keeps the same visual rhythm as the original "Predice. Compite. Gana." --}}
+                                @php
+                                    $heroTitle = $homeHero->title ?: 'Predice. Compite. Gana.';
+                                    $words = preg_split('/\s+/', trim($heroTitle));
+                                    $lastWord = array_pop($words);
+                                    $firstPart = implode(' ', $words);
+                                @endphp
+                                {{ $firstPart }} @if($firstPart)<span class="text-tc-accent">{{ $lastWord }}</span>@else{{ $lastWord }}@endif
                             </h1>
                             <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
-                                Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.
+                                {{ $homeHero->subtitle ?: 'Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.' }}
                             </p>
                             <div class="flex flex-col sm:flex-row gap-4 justify-center">
                                 @guest
