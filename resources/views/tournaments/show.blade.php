@@ -466,7 +466,16 @@
     $requiredPicksMap = array_filter($requiredPicksMap, fn($c) => $c > 0);
 @endphp
 
-<div class="bg-gradient-to-b from-gray-50 to-gray-100/60 min-h-[60vh]">
+@php
+    // Choose the wrapper height based on what we're about to render:
+    // - paywall active: extend the gradient to full screen so there's no white gap
+    // - bracket present: 60vh is enough (the bracket fills the space)
+    // - neither (empty tournament): 0 — let the "No hay partidos" block below take over
+    $wrapperHeight = ($needsPayment ?? false)
+        ? 'min-h-screen'
+        : (($orderedRounds->count() > 0) ? 'min-h-[60vh]' : '');
+@endphp
+<div class="bg-gradient-to-b from-gray-50 to-gray-100/60 {{ $wrapperHeight }}">
 
     {{-- ═══════ TABS ATP/WTA (only when tournament has siblings) ═══════ --}}
     @php
@@ -1375,10 +1384,12 @@
 </div>
 
 {{-- "No matches" empty state. Hidden when the paywall is active — otherwise
-     the empty state stacks below the paywall card, which looks broken. --}}
+     the empty state stacks below the paywall card, which looks broken.
+     `min-h-screen` ensures the grey background reaches the footer even when
+     the viewport is taller than the empty-state card. --}}
 @if($orderedRounds->count() === 0 && !($needsPayment ?? false))
-<div class="bg-gradient-to-b from-gray-50 to-gray-100 min-h-[50vh] flex items-center justify-center">
-    <div class="text-center">
+<div class="bg-gradient-to-b from-gray-50 to-gray-100 min-h-screen flex items-center justify-center">
+    <div class="text-center -mt-32">
         <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gray-100 flex items-center justify-center">
             <svg class="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         </div>
