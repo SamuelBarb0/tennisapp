@@ -21,36 +21,32 @@ class AppServiceProvider extends ServiceProvider
         // in Spanish. Without this the locale stays at "en" even though APP_LOCALE=es.
         Carbon::setLocale(config('app.locale', 'es'));
 
-        // The default password-reset notification ships in English. The MailMessage
-        // strings are sent through __(), but the SUBJECT line and a couple of
-        // composed sentences aren't, so we rebuild the message in Spanish.
+        // Use our branded Tennis Challenge mail layout (resources/views/emails/auth/*)
+        // for the password-reset and email-verification notifications, instead of
+        // Laravel's default "Hello! Regards" template that ships with the framework.
         ResetPassword::toMailUsing(function ($notifiable, $token) {
             $url = url(route('password.reset', [
                 'token' => $token,
                 'email' => $notifiable->getEmailForPasswordReset(),
             ], false));
-
             $expire = config('auth.passwords.' . config('auth.defaults.passwords') . '.expire');
 
             return (new MailMessage)
                 ->subject('Restablece tu contraseña — Tennis Challenge')
-                ->greeting('¡Hola!')
-                ->line('Recibes este correo porque solicitaste restablecer la contraseña de tu cuenta.')
-                ->action('Restablecer contraseña', $url)
-                ->line("Este enlace expira en {$expire} minutos.")
-                ->line('Si no solicitaste el restablecimiento, puedes ignorar este correo.')
-                ->salutation('Saludos, el equipo de Tennis Challenge');
+                ->view('emails.auth.reset-password', [
+                    'user'   => $notifiable,
+                    'url'    => $url,
+                    'expire' => $expire,
+                ]);
         });
 
-        // Same treatment for the email-verification notification.
         VerifyEmail::toMailUsing(function ($notifiable, $url) {
             return (new MailMessage)
                 ->subject('Verifica tu correo electrónico — Tennis Challenge')
-                ->greeting('¡Hola!')
-                ->line('Gracias por registrarte en Tennis Challenge. Por favor verifica tu dirección de correo electrónico haciendo clic en el botón de abajo.')
-                ->action('Verificar correo', $url)
-                ->line('Si no creaste una cuenta, puedes ignorar este correo.')
-                ->salutation('Saludos, el equipo de Tennis Challenge');
+                ->view('emails.auth.verify-email', [
+                    'user' => $notifiable,
+                    'url'  => $url,
+                ]);
         });
     }
 }
