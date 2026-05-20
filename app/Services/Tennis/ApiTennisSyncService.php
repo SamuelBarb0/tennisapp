@@ -272,10 +272,25 @@ class ApiTennisSyncService
         // at once times out on Grand Slams + Masters because the API streams
         // pointbypoint payloads slowly (1MB+ responses). Day-by-day stays well
         // under the 90s timeout per call.
+        //
+        // We anchor the window to the tournament's own dates (when known) — a
+        // simple "now() ± 21 days" misses Australian Open in May, French Open
+        // in September, etc. Falls back to a now-centered window for tournaments
+        // without dates yet (those still in discovery).
+        if ($tournament->start_date && $tournament->end_date) {
+            // Pad by 5 days on each side to absorb timezone drift and qualifying
+            // pre-events that sometimes carry over a calendar day.
+            $windowStart = $tournament->start_date->copy()->subDays(5);
+            $windowEnd   = $tournament->end_date->copy()->addDays(5);
+        } else {
+            $windowStart = now()->subDays(21);
+            $windowEnd   = now()->addDays(21);
+        }
+
         $allFixtures = [];
-        for ($i = -21; $i <= 21; $i += 3) {
-            $chunkStart = now()->addDays($i)->format('Y-m-d');
-            $chunkEnd   = now()->addDays(min($i + 2, 21))->format('Y-m-d');
+        for ($cursor = $windowStart->copy(); $cursor->lte($windowEnd); $cursor->addDays(3)) {
+            $chunkStart = $cursor->format('Y-m-d');
+            $chunkEnd   = $cursor->copy()->addDays(2)->min($windowEnd)->format('Y-m-d');
             $resp = $this->client->fixtures($chunkStart, $chunkEnd, [
                 'tournament_key' => (int) $tournament->api_tournament_key,
             ]);
