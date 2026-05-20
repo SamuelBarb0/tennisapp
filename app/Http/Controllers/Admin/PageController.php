@@ -37,4 +37,19 @@ class PageController extends Controller
         $page->update($data);
         return back()->with('success', 'Página actualizada.');
     }
+
+    /**
+     * Upload an image from the rich text editor and return its public URL.
+     * Files land in storage/app/public/pages/ — make sure `php artisan storage:link`
+     * has been run so /storage/pages/... resolves on the public side.
+     */
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,gif,webp', 'max:4096'],
+        ]);
+
+        $path = $request->file('image')->store('pages', 'public');
+        return response()->json(['url' => asset('storage/' . $path)]);
+    }
 }

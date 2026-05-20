@@ -79,9 +79,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::patch('banners/{banner}/toggle', [AdminBannerController::class, 'toggle'])->name('banners.toggle');
 
     // CMS pages — Reglas, Términos, Privacidad, Contacto
-    Route::get('pages',          [\App\Http\Controllers\Admin\PageController::class, 'index'])->name('pages.index');
-    Route::get('pages/{page}',   [\App\Http\Controllers\Admin\PageController::class, 'edit'])->name('pages.edit');
-    Route::patch('pages/{page}', [\App\Http\Controllers\Admin\PageController::class, 'update'])->name('pages.update');
+    Route::get('pages',                 [\App\Http\Controllers\Admin\PageController::class, 'index'])->name('pages.index');
+    // NOTE: image upload route MUST come before the {page} route so the literal
+    // segment `upload-image` isn't captured as the {page} binding.
+    Route::post('pages/upload-image',   [\App\Http\Controllers\Admin\PageController::class, 'uploadImage'])->name('pages.upload-image');
+    Route::get('pages/{page}',          [\App\Http\Controllers\Admin\PageController::class, 'edit'])->name('pages.edit');
+    Route::patch('pages/{page}',        [\App\Http\Controllers\Admin\PageController::class, 'update'])->name('pages.update');
     Route::get('payments', [AdminPaymentController::class, 'index'])->name('payments.index');
     Route::get('settings', [AdminSettingController::class, 'index'])->name('settings.index');
     Route::post('settings', [AdminSettingController::class, 'update'])->name('settings.update');

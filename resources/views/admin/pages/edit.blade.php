@@ -61,9 +61,23 @@
                 <span class="w-px bg-gray-300 mx-1"></span>
                 <button type="button" @click="link()" title="Enlace"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">🔗 Link</button>
+                <span class="w-px bg-gray-300 mx-1"></span>
+                <button type="button" @click="$refs.fileInput.click()" title="Subir imagen desde mi computador"
+                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200" :disabled="uploading"
+                        :class="uploading ? 'opacity-50 cursor-wait' : ''">
+                    <span x-show="!uploading">📷 Subir imagen</span>
+                    <span x-show="uploading">Subiendo…</span>
+                </button>
+                <button type="button" @click="imageUrl()" title="Insertar imagen desde una URL"
+                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">🌐 URL imagen</button>
+                <span class="w-px bg-gray-300 mx-1"></span>
                 <button type="button" @click="cmd('removeFormat')" title="Limpiar formato"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">⨯ Limpiar</button>
             </div>
+
+            {{-- Hidden file input used by the "Subir imagen" button --}}
+            <input type="file" x-ref="fileInput" accept="image/jpeg,image/png,image/gif,image/webp"
+                   class="hidden" @change="uploadImage($event)">
 
             {{-- Editor --}}
             <div x-ref="editor" contenteditable="true"
@@ -73,7 +87,7 @@
                 {!! old('content', $page->content) !!}
             </div>
             <textarea x-ref="html" name="content" class="hidden">{{ old('content', $page->content) }}</textarea>
-            <p class="text-xs text-gray-400 mt-2">Sugerencia: selecciona el texto y aplica el formato desde la barra.</p>
+            <p class="text-xs text-gray-400 mt-2">Sugerencia: selecciona el texto y aplica el formato desde la barra. Las imágenes subidas se guardan en el servidor.</p>
         </div>
 
         <div class="p-5">
@@ -99,9 +113,19 @@
 <script>
 function pageEditor() {
     return {
+        uploading: false,
+        savedRange: null,
         init() {
             // Sync textarea on load
             this.$refs.html.value = this.$refs.editor.innerHTML;
+            // Remember the last caret position inside the editor so images can be
+            // inserted at that point even after focus moves to a file picker / prompt.
+            this.$refs.editor.addEventListener('blur', () => {
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount && this.$refs.editor.contains(sel.anchorNode)) {
+                    this.savedRange = sel.getRangeAt(0).cloneRange();
+                }
+            });
         },
         cmd(command, value = null) {
             this.$refs.editor.focus();
@@ -111,6 +135,54 @@ function pageEditor() {
         link() {
             const url = prompt('URL del enlace (ej. https://...)');
             if (url) this.cmd('createLink', url);
+        },
+        imageUrl() {
+            const url = prompt('URL de la imagen (https://...)');
+            if (!url) return;
+            this.insertImageAtCaret(url);
+        },
+        async uploadImage(e) {
+            const file = e.target.files && e.target.files[0];
+            // Reset so picking the same file twice in a row still fires `change`.
+            e.target.value = '';
+            if (!file) return;
+            if (file.size > 4 * 1024 * 1024) {
+                alert('La imagen pesa más de 4MB. Comprímela antes de subirla.');
+                return;
+            }
+            this.uploading = true;
+            try {
+                const fd = new FormData();
+                fd.append('image', file);
+                const res = await fetch('{{ route('admin.pages.upload-image') }}', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+                    body: fd,
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.message || 'No se pudo subir la imagen.');
+                }
+                const data = await res.json();
+                this.insertImageAtCaret(data.url);
+            } catch (err) {
+                alert(err.message || 'Error al subir la imagen.');
+            } finally {
+                this.uploading = false;
+            }
+        },
+        insertImageAtCaret(url) {
+            this.$refs.editor.focus();
+            // Restore previously saved caret position so the image lands where the
+            // user was typing, not at the start of the editor.
+            if (this.savedRange) {
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(this.savedRange);
+            }
+            const img = `<img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;margin:1rem 0;">`;
+            document.execCommand('insertHTML', false, img);
+            this.$refs.html.value = this.$refs.editor.innerHTML;
         },
     };
 }
