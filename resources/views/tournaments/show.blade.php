@@ -506,7 +506,26 @@
                         </svg>
                     </div>
                     <h2 class="text-2xl font-black tracking-tight">Torneo Premium</h2>
-                    <p class="text-white/70 text-sm mt-2 max-w-xs mx-auto">Desbloquea las predicciones de <strong class="text-tc-accent">{{ $tournament->name }}</strong> con un único pago.</p>
+                    @php
+                        // If this tournament belongs to a family with both ATP and WTA draws,
+                        // the single payment unlocks both — surface that in the paywall copy.
+                        $familyTours = $tournament->family_slug
+                            ? \App\Models\Tournament::where('family_slug', $tournament->family_slug)
+                                ->get()
+                                ->map(fn($t) => $t->tour_code)
+                                ->unique()
+                                ->values()
+                                ->all()
+                            : [$tournament->tour_code];
+                        $hasBothTours = count(array_intersect(['ATP', 'WTA'], $familyTours)) === 2;
+                    @endphp
+                    <p class="text-white/70 text-sm mt-2 max-w-xs mx-auto">
+                        Desbloquea las predicciones de <strong class="text-tc-accent">{{ $tournament->name }}</strong>
+                        @if($hasBothTours)
+                            <span class="inline-block mt-2 px-2 py-0.5 bg-tc-accent/20 border border-tc-accent/40 rounded-full text-[10px] font-black uppercase tracking-widest text-tc-accent">Brackets ATP + WTA</span>
+                        @endif
+                        <span class="block mt-1">con un único pago.</span>
+                    </p>
                 </div>
             </div>
 
@@ -522,12 +541,23 @@
 
             {{-- Benefits --}}
             <div class="px-8 py-6 space-y-3">
-                @foreach([
-                    'Llena tu bracket completo del torneo',
-                    'Compite en el ranking del torneo',
-                    'Predice el marcador de la final (desempate)',
-                    'Sigue tus puntos en tiempo real',
-                ] as $perk)
+                @php
+                    $perks = $hasBothTours
+                        ? [
+                            'Acceso a los brackets ATP y WTA del torneo',
+                            'Llena ambos brackets completos',
+                            'Compite en el ranking del torneo',
+                            'Predice el marcador de la final (desempate)',
+                            'Sigue tus puntos en tiempo real',
+                        ]
+                        : [
+                            'Llena tu bracket completo del torneo',
+                            'Compite en el ranking del torneo',
+                            'Predice el marcador de la final (desempate)',
+                            'Sigue tus puntos en tiempo real',
+                        ];
+                @endphp
+                @foreach($perks as $perk)
                 <div class="flex items-center gap-3">
                     <div class="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center shrink-0">
                         <svg class="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
