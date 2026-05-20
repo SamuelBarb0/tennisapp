@@ -205,8 +205,10 @@
         </div>
     </nav>
 
-    {{-- Main Content --}}
-    <main class="flex-1">
+    {{-- Main Content. `flex flex-col` lets a child wrapper with `flex-1` stretch
+         to fill the remaining viewport height (used by tournament/empty pages
+         so their grey background reaches the footer instead of cutting off). --}}
+    <main class="flex-1 flex flex-col">
         @yield('content')
     </main>
 
