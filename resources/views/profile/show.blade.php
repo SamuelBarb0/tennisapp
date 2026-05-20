@@ -188,7 +188,7 @@
 
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-1.5 mb-1">
-                            <span class="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest {{ $t->type === 'GrandSlam' ? 'bg-yellow-100 text-yellow-700' : (str_starts_with($t->type, 'ATP') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700') }}">{{ $t->type }}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest {{ $t->type === 'GrandSlam' ? 'bg-yellow-100 text-yellow-700' : (str_starts_with($t->type, 'ATP') ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700') }}">{{ $t->type }}</span>
                             @if($isLive)
                             <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-100 text-red-700"><span class="w-1 h-1 bg-red-500 rounded-full animate-pulse"></span>LIVE</span>
                             @elseif($isFinished)
