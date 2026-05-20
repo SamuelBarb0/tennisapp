@@ -1,6 +1,20 @@
 @extends('layouts.admin')
 @section('title', 'Editar: ' . $page->title)
 
+@push('styles')
+{{-- Quill rich text editor — CDN, no API key required --}}
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+<style>
+    /* Make Quill's editor area match the rest of the admin forms. */
+    .ql-toolbar.ql-snow,
+    .ql-container.ql-snow { border-color: #e5e7eb; }
+    .ql-toolbar.ql-snow  { border-radius: 0.5rem 0.5rem 0 0; background: #f9fafb; }
+    .ql-container.ql-snow { border-radius: 0 0 0.5rem 0.5rem; min-height: 400px; font-size: 0.95rem; }
+    .ql-editor { min-height: 400px; }
+    .ql-editor img { max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0; }
+</style>
+@endpush
+
 @section('content')
 <div class="flex items-center gap-3 mb-6">
     <a href="{{ route('admin.pages.index') }}" class="text-gray-400 hover:text-gray-600">
@@ -18,7 +32,7 @@
 </div>
 @endif
 
-<form action="{{ route('admin.pages.update', $page) }}" method="POST" class="space-y-5" x-data="pageEditor()" x-init="init()">
+<form id="page-form" action="{{ route('admin.pages.update', $page) }}" method="POST" class="space-y-5">
     @csrf @method('PATCH')
 
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -38,57 +52,15 @@
         <div class="p-5 border-b border-gray-100">
             <label class="block text-sm font-semibold text-gray-700 mb-3">Contenido</label>
 
-            {{-- Toolbar. Each button uses @mousedown.prevent so the editor keeps focus
-                 and the current text selection survives the click. --}}
-            <div class="flex flex-wrap gap-1 mb-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                <button type="button" @mousedown.prevent @click="cmd('bold')" title="Negrita"
-                        class="px-3 py-1.5 text-sm font-bold rounded hover:bg-gray-200">B</button>
-                <button type="button" @mousedown.prevent @click="cmd('italic')" title="Cursiva"
-                        class="px-3 py-1.5 text-sm italic rounded hover:bg-gray-200">I</button>
-                <button type="button" @mousedown.prevent @click="cmd('underline')" title="Subrayado"
-                        class="px-3 py-1.5 text-sm underline rounded hover:bg-gray-200">U</button>
-                <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @mousedown.prevent @click="cmd('formatBlock', 'H2')" title="Título"
-                        class="px-3 py-1.5 text-sm font-bold rounded hover:bg-gray-200">H2</button>
-                <button type="button" @mousedown.prevent @click="cmd('formatBlock', 'H3')" title="Subtítulo"
-                        class="px-3 py-1.5 text-sm font-bold rounded hover:bg-gray-200">H3</button>
-                <button type="button" @mousedown.prevent @click="cmd('formatBlock', 'P')" title="Párrafo"
-                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">P</button>
-                <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @mousedown.prevent @click="cmd('insertUnorderedList')" title="Lista"
-                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">• Lista</button>
-                <button type="button" @mousedown.prevent @click="cmd('insertOrderedList')" title="Lista numerada"
-                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">1. Lista</button>
-                <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @mousedown.prevent @click="link()" title="Enlace"
-                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">🔗 Link</button>
-                <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @mousedown.prevent @click="pickFile()" title="Subir imagen desde mi computador"
-                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200" :disabled="uploading"
-                        :class="uploading ? 'opacity-50 cursor-wait' : ''">
-                    <span x-show="!uploading">📷 Subir imagen</span>
-                    <span x-show="uploading">Subiendo…</span>
-                </button>
-                <button type="button" @mousedown.prevent @click="imageUrl()" title="Insertar imagen desde una URL"
-                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">🌐 URL imagen</button>
-                <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @mousedown.prevent @click="cmd('removeFormat')" title="Limpiar formato"
-                        class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">⨯ Limpiar</button>
-            </div>
+            {{-- Quill mounts itself into #editor; we keep the HTML in a hidden textarea
+                 named "content" so the existing PageController::update() validation
+                 ('content' => required|string) keeps working unchanged. --}}
+            <div id="editor">{!! old('content', $page->content) !!}</div>
+            <textarea id="editor-html" name="content" class="hidden">{{ old('content', $page->content) }}</textarea>
 
-            {{-- Hidden file input used by the "Subir imagen" button --}}
-            <input type="file" x-ref="fileInput" accept="image/jpeg,image/png,image/gif,image/webp"
-                   class="hidden" @change="uploadImage($event)">
-
-            {{-- Editor --}}
-            <div x-ref="editor" contenteditable="true"
-                 @input="$refs.html.value = $refs.editor.innerHTML"
-                 class="prose prose-sm max-w-none min-h-[400px] p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none bg-white"
-                 style="white-space: normal;">
-                {!! old('content', $page->content) !!}
-            </div>
-            <textarea x-ref="html" name="content" class="hidden">{{ old('content', $page->content) }}</textarea>
-            <p class="text-xs text-gray-400 mt-2">Sugerencia: selecciona el texto y aplica el formato desde la barra. Las imágenes subidas se guardan en el servidor.</p>
+            <p class="text-xs text-gray-400 mt-2">
+                Usa la barra para dar formato. El botón de imagen (🖼️) sube archivos al servidor automáticamente.
+            </p>
         </div>
 
         <div class="p-5">
@@ -111,217 +83,76 @@
     </div>
 </form>
 
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 <script>
-function pageEditor() {
-    return {
-        uploading: false,
-        savedRange: null,
-        init() {
-            // Sync textarea on load
-            this.$refs.html.value = this.$refs.editor.innerHTML;
-            // Track caret position continuously while user types/clicks in the editor.
-            // We save it on every selection change because focus moves the moment a
-            // toolbar button or file picker activates.
-            const save = () => {
-                const sel = window.getSelection();
-                if (sel && sel.rangeCount && this.$refs.editor.contains(sel.anchorNode)) {
-                    this.savedRange = sel.getRangeAt(0).cloneRange();
-                }
-            };
-            this.$refs.editor.addEventListener('keyup', save);
-            this.$refs.editor.addEventListener('mouseup', save);
-            this.$refs.editor.addEventListener('focus', save);
-        },
-        restoreCaret() {
-            this.$refs.editor.focus();
-            if (this.savedRange) {
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(this.savedRange);
-            }
-        },
-        sync() {
-            this.$refs.html.value = this.$refs.editor.innerHTML;
-        },
-        getRange() {
-            this.restoreCaret();
-            const sel = window.getSelection();
-            if (!sel || !sel.rangeCount) return null;
-            const range = sel.getRangeAt(0);
-            // Only operate when the selection is actually inside the editor.
-            return this.$refs.editor.contains(range.commonAncestorContainer) ? range : null;
-        },
-        // Wrap the current selection in an inline tag (b/i/u). If nothing is
-        // selected we drop a zero-width-friendly element at the caret instead.
-        wrapInline(tag) {
-            const range = this.getRange();
-            if (!range) return;
-            const el = document.createElement(tag);
-            if (range.collapsed) {
-                el.appendChild(document.createTextNode('​'));
-                range.insertNode(el);
-                // Move caret inside the new element so the user can keep typing.
-                const r = document.createRange();
-                r.setStart(el.firstChild, 1);
-                r.collapse(true);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(r);
-            } else {
-                el.appendChild(range.extractContents());
-                range.insertNode(el);
-            }
-            this.sync();
-        },
-        // Replace the block containing the caret with a new tag (h2/h3/p).
-        formatBlock(tag) {
-            const range = this.getRange();
-            if (!range) return;
-            // Find the nearest block-level ancestor inside the editor.
-            let node = range.commonAncestorContainer;
-            if (node.nodeType === 3) node = node.parentNode;
-            const blockTags = ['P','DIV','H1','H2','H3','H4','H5','H6','LI','BLOCKQUOTE'];
-            while (node && node !== this.$refs.editor && !blockTags.includes(node.nodeName)) {
-                node = node.parentNode;
-            }
-            if (!node || node === this.$refs.editor) {
-                // No wrapping block — wrap a fresh one around the selection / caret line.
-                const el = document.createElement(tag);
-                el.appendChild(range.extractContents());
-                if (!el.textContent) el.appendChild(document.createTextNode('​'));
-                range.insertNode(el);
-            } else {
-                const el = document.createElement(tag);
-                while (node.firstChild) el.appendChild(node.firstChild);
-                node.parentNode.replaceChild(el, node);
-            }
-            this.sync();
-        },
-        insertList(ordered) {
-            const range = this.getRange();
-            if (!range) return;
-            const list = document.createElement(ordered ? 'ol' : 'ul');
-            const li = document.createElement('li');
-            if (range.collapsed) {
-                li.appendChild(document.createTextNode('​'));
-            } else {
-                li.appendChild(range.extractContents());
-            }
-            list.appendChild(li);
-            range.insertNode(list);
-            // Place caret at end of new list item.
-            const r = document.createRange();
-            r.selectNodeContents(li);
-            r.collapse(false);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(r);
-            this.sync();
-        },
-        link() {
-            const url = prompt('URL del enlace (ej. https://...)');
-            if (!url) return;
-            const range = this.getRange();
-            if (!range || range.collapsed) {
-                alert('Selecciona primero el texto que quieres convertir en enlace.');
-                return;
-            }
-            const a = document.createElement('a');
-            a.href = url;
-            a.target = '_blank';
-            a.rel = 'noopener';
-            a.appendChild(range.extractContents());
-            range.insertNode(a);
-            this.sync();
-        },
-        clearFormat() {
-            const range = this.getRange();
-            if (!range || range.collapsed) return;
-            const text = range.toString();
-            range.deleteContents();
-            range.insertNode(document.createTextNode(text));
-            this.sync();
-        },
-        // Old API kept for the toolbar buttons — dispatches to the right handler.
-        cmd(command, value = null) {
-            switch (command) {
-                case 'bold':                return this.wrapInline('strong');
-                case 'italic':              return this.wrapInline('em');
-                case 'underline':           return this.wrapInline('u');
-                case 'formatBlock':         return this.formatBlock((value || 'p').toLowerCase());
-                case 'insertUnorderedList': return this.insertList(false);
-                case 'insertOrderedList':   return this.insertList(true);
-                case 'removeFormat':        return this.clearFormat();
-            }
-        },
-        pickFile() {
-            // The file picker steals focus, so capture the caret first.
-            this.restoreCaret();
-            this.$refs.fileInput.click();
-        },
-        imageUrl() {
-            const url = prompt('URL de la imagen (https://...)');
-            if (!url) return;
-            this.insertImageAtCaret(url);
-        },
-        async uploadImage(e) {
-            const file = e.target.files && e.target.files[0];
-            // Reset so picking the same file twice in a row still fires `change`.
-            e.target.value = '';
-            if (!file) return;
-            if (file.size > 4 * 1024 * 1024) {
-                alert('La imagen pesa más de 4MB. Comprímela antes de subirla.');
-                return;
-            }
-            this.uploading = true;
-            try {
-                const fd = new FormData();
-                fd.append('image', file);
-                const res = await fetch('{{ route('admin.pages.upload-image') }}', {
-                    method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
-                    body: fd,
-                });
-                if (!res.ok) {
-                    const errText = await res.text();
-                    console.error('Upload failed:', res.status, errText);
-                    throw new Error('No se pudo subir la imagen (HTTP ' + res.status + '). Revisa la consola.');
-                }
-                const data = await res.json();
-                this.insertImageAtCaret(data.url);
-            } catch (err) {
-                console.error(err);
-                alert(err.message || 'Error al subir la imagen.');
-            } finally {
-                this.uploading = false;
-            }
-        },
-        insertImageAtCaret(url) {
-            const img = document.createElement('img');
-            img.src = url;
-            img.alt = '';
-            img.style.maxWidth = '100%';
-            img.style.height = 'auto';
-            img.style.borderRadius = '8px';
-            img.style.margin = '1rem 0';
+(function () {
+    const uploadUrl = @json(route('admin.pages.upload-image'));
+    const csrfToken = @json(csrf_token());
 
-            const range = this.getRange();
-            if (range) {
-                range.deleteContents();
-                range.insertNode(img);
-                // Move caret right after the image.
-                const r = document.createRange();
-                r.setStartAfter(img);
-                r.collapse(true);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(r);
-            } else {
-                this.$refs.editor.appendChild(img);
-            }
-            this.sync();
+    const quill = new Quill('#editor', {
+        theme: 'snow',
+        placeholder: 'Escribe el contenido de la página…',
+        modules: {
+            toolbar: {
+                container: [
+                    [{ header: [2, 3, false] }],
+                    ['bold', 'italic', 'underline'],
+                    [{ list: 'ordered' }, { list: 'bullet' }],
+                    ['link', 'image'],
+                    ['clean'],
+                ],
+                handlers: {
+                    // Override the default image button so uploads go through our
+                    // /admin/pages/upload-image endpoint instead of base64-embedding.
+                    image: function () {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+                        input.onchange = async () => {
+                            const file = input.files && input.files[0];
+                            if (!file) return;
+                            if (file.size > 4 * 1024 * 1024) {
+                                alert('La imagen pesa más de 4MB. Comprímela antes de subirla.');
+                                return;
+                            }
+                            try {
+                                const fd = new FormData();
+                                fd.append('image', file);
+                                const res = await fetch(uploadUrl, {
+                                    method: 'POST',
+                                    headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                                    body: fd,
+                                });
+                                if (!res.ok) {
+                                    const text = await res.text();
+                                    console.error('Upload failed:', res.status, text);
+                                    throw new Error('HTTP ' + res.status);
+                                }
+                                const { url } = await res.json();
+                                const range = quill.getSelection(true);
+                                quill.insertEmbed(range.index, 'image', url, 'user');
+                                quill.setSelection(range.index + 1, 0, 'silent');
+                            } catch (err) {
+                                console.error(err);
+                                alert('No se pudo subir la imagen: ' + err.message);
+                            }
+                        };
+                        input.click();
+                    },
+                },
+            },
         },
-    };
-}
+    });
+
+    // Keep the hidden textarea in sync so the form submits the latest HTML.
+    const htmlField = document.getElementById('editor-html');
+    quill.on('text-change', () => {
+        htmlField.value = quill.root.innerHTML;
+    });
+    // Also sync on submit as a safety net (e.g. browser autofill timing).
+    document.getElementById('page-form').addEventListener('submit', () => {
+        htmlField.value = quill.root.innerHTML;
+    });
+})();
 </script>
 @endsection
