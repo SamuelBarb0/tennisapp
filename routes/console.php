@@ -51,6 +51,15 @@ Schedule::command('tennis:recompute-status')
     ->dailyAt('03:00')
     ->onOneServer();
 
+// Weekly safety net for finished tournaments whose results never landed:
+// re-pull fixtures from api-tennis (using the start_date/end_date window) and
+// clean any leftover pending placeholders. --only-broken skips tournaments
+// that already have finished matches, so this stays cheap once everything is
+// healthy. Runs Mondays at 03:30 UTC, right after the daily recompute.
+Schedule::command('tennis:repair-historical --only-broken')
+    ->weeklyOn(1, '03:30')
+    ->onOneServer();
+
 // Fill in missing tournament dates from bracket.tennis once a day. This catches
 // tournaments where api-tennis hasn't published fixtures yet but bracket.tennis
 // already shows the official dates (typical ~2-3 weeks before each event).
