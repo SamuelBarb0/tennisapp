@@ -38,42 +38,41 @@
         <div class="p-5 border-b border-gray-100">
             <label class="block text-sm font-semibold text-gray-700 mb-3">Contenido</label>
 
-            {{-- Toolbar — every button blocks `mousedown` so the editor keeps focus
-                 and `document.execCommand` operates on the current selection. --}}
-            <div class="flex flex-wrap gap-1 mb-2 bg-gray-50 p-2 rounded-lg border border-gray-200"
-                 @mousedown.prevent>
-                <button type="button" @click="cmd('bold')" title="Negrita"
+            {{-- Toolbar. Each button uses @mousedown.prevent so the editor keeps focus
+                 and the current text selection survives the click. --}}
+            <div class="flex flex-wrap gap-1 mb-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                <button type="button" @mousedown.prevent @click="cmd('bold')" title="Negrita"
                         class="px-3 py-1.5 text-sm font-bold rounded hover:bg-gray-200">B</button>
-                <button type="button" @click="cmd('italic')" title="Cursiva"
+                <button type="button" @mousedown.prevent @click="cmd('italic')" title="Cursiva"
                         class="px-3 py-1.5 text-sm italic rounded hover:bg-gray-200">I</button>
-                <button type="button" @click="cmd('underline')" title="Subrayado"
+                <button type="button" @mousedown.prevent @click="cmd('underline')" title="Subrayado"
                         class="px-3 py-1.5 text-sm underline rounded hover:bg-gray-200">U</button>
                 <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @click="cmd('formatBlock', 'H2')" title="Título"
+                <button type="button" @mousedown.prevent @click="cmd('formatBlock', 'H2')" title="Título"
                         class="px-3 py-1.5 text-sm font-bold rounded hover:bg-gray-200">H2</button>
-                <button type="button" @click="cmd('formatBlock', 'H3')" title="Subtítulo"
+                <button type="button" @mousedown.prevent @click="cmd('formatBlock', 'H3')" title="Subtítulo"
                         class="px-3 py-1.5 text-sm font-bold rounded hover:bg-gray-200">H3</button>
-                <button type="button" @click="cmd('formatBlock', 'P')" title="Párrafo"
+                <button type="button" @mousedown.prevent @click="cmd('formatBlock', 'P')" title="Párrafo"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">P</button>
                 <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @click="cmd('insertUnorderedList')" title="Lista"
+                <button type="button" @mousedown.prevent @click="cmd('insertUnorderedList')" title="Lista"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">• Lista</button>
-                <button type="button" @click="cmd('insertOrderedList')" title="Lista numerada"
+                <button type="button" @mousedown.prevent @click="cmd('insertOrderedList')" title="Lista numerada"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">1. Lista</button>
                 <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @click="link()" title="Enlace"
+                <button type="button" @mousedown.prevent @click="link()" title="Enlace"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">🔗 Link</button>
                 <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @click="pickFile()" title="Subir imagen desde mi computador"
+                <button type="button" @mousedown.prevent @click="pickFile()" title="Subir imagen desde mi computador"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200" :disabled="uploading"
                         :class="uploading ? 'opacity-50 cursor-wait' : ''">
                     <span x-show="!uploading">📷 Subir imagen</span>
                     <span x-show="uploading">Subiendo…</span>
                 </button>
-                <button type="button" @click="imageUrl()" title="Insertar imagen desde una URL"
+                <button type="button" @mousedown.prevent @click="imageUrl()" title="Insertar imagen desde una URL"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">🌐 URL imagen</button>
                 <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @click="cmd('removeFormat')" title="Limpiar formato"
+                <button type="button" @mousedown.prevent @click="cmd('removeFormat')" title="Limpiar formato"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">⨯ Limpiar</button>
             </div>
 
