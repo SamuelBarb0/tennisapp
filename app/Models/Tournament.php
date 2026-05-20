@@ -151,12 +151,18 @@ class Tournament extends Model
 
     /**
      * State the home/cards use to decide which CTA button to render:
+     *  - 'finished'    → tournament is over; show "FINALIZADO" / results CTA
      *  - 'live'        → tournament already started; only viewing allowed
      *  - 'open'        → bracket is loaded and predictions are still open
      *  - 'unavailable' → bracket not loaded yet (no first-round matches with real players)
      */
     public function getBracketStateAttribute(): string
     {
+        // A finished tournament must never be rendered as live/open — even if
+        // its first match was scheduled in the past, predictions are closed
+        // and the CTA should send users to the results view.
+        if ($this->status === 'finished') return 'finished';
+
         $first = $this->matches()
             ->whereNotIn('status', ['cancelled'])
             ->orderBy('scheduled_at')

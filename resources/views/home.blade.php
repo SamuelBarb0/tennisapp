@@ -155,7 +155,9 @@
                 {{-- Lado izquierdo: info del torneo --}}
                 <div class="md:w-1/2 p-6 md:p-8 flex flex-col">
                     <div class="flex items-center gap-2 mb-4 flex-wrap">
-                        @if($state === 'live')
+                        @if($state === 'finished')
+                            <span class="px-3 py-1 bg-gray-300 text-gray-700 text-xs font-bold rounded-full">FINALIZADO</span>
+                        @elseif($state === 'live')
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">
                                 <span class="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>EN VIVO
                             </span>
@@ -203,7 +205,13 @@
                     </div>
                     @endif
                     <div class="mt-auto pt-2">
-                        @if($state === 'live')
+                        @if($state === 'finished')
+                            <a href="{{ route('tournaments.show', $ft) }}" class="inline-flex items-center gap-2 px-6 py-3 bg-gray-600 text-white rounded-full font-semibold hover:bg-gray-700 transition-all shadow-md">
+                                Ver resultados
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                            </a>
+                            <p class="text-xs text-gray-400 mt-2">Torneo finalizado — predicciones cerradas</p>
+                        @elseif($state === 'live')
                             <a href="{{ route('tournaments.show', $ft) }}" class="inline-flex items-center gap-2 px-6 py-3 bg-red-500 text-white rounded-full font-semibold hover:bg-red-600 transition-all shadow-md">
                                 Torneo en vivo
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>

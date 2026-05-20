@@ -104,7 +104,17 @@
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap mb-1">
                             <h3 class="font-bold text-base sm:text-lg group-hover:text-tc-primary transition-colors truncate">{{ $tournament->name }}</h3>
-                            <span class="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded-full {{ $tournament->type === 'GrandSlam' ? 'bg-yellow-100 text-yellow-700' : (str_starts_with($tournament->type, 'ATP') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700') }}">{{ $tournament->type }}</span>
+                            @php
+                                // When a family has both ATP and WTA siblings the controller attaches `family_tours`.
+                                // Show one chip per tour so users can tell at a glance that the event has both draws.
+                                $tourCodes = $tournament->family_tours ?? [$tournament->tour_code];
+                            @endphp
+                            @foreach($tourCodes as $tourCode)
+                                <span class="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded-full
+                                    {{ $tourCode === 'GS' ? 'bg-yellow-100 text-yellow-700' : '' }}
+                                    {{ $tourCode === 'ATP' ? 'bg-blue-100 text-blue-700' : '' }}
+                                    {{ $tourCode === 'WTA' ? 'bg-pink-100 text-pink-700' : '' }}">{{ $tourCode }}</span>
+                            @endforeach
                         </div>
                         <div class="text-xs text-gray-500 flex items-center gap-3 flex-wrap">
                             <span class="flex items-center gap-1">
