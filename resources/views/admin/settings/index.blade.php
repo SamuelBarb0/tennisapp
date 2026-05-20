@@ -48,7 +48,16 @@
             <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Contacto y Redes Sociales</h3>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Email de contacto</label>
-                <input type="email" name="contact_email" value="{{ $settings['contact_email'] ?? '' }}" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+                <input type="email" name="contact_email" value="{{ $settings['contact_email'] ?? '' }}" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none" placeholder="contacto@tennischallenge.com.co">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">WhatsApp / Teléfono</label>
+                <input type="text" name="contact_phone" value="{{ $settings['contact_phone'] ?? '' }}" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none" placeholder="+57 300 000 0000">
+                <p class="text-[10px] text-gray-400 mt-1">Incluye el código de país (ej. +57). Se usará como link WhatsApp.</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Ciudad / Ubicación</label>
+                <input type="text" name="contact_city" value="{{ $settings['contact_city'] ?? '' }}" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none" placeholder="Bogotá, Colombia">
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Instagram</label>
@@ -68,14 +77,12 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Facebook</label>
                 <input type="text" name="facebook" value="{{ $settings['facebook'] ?? '' }}" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none" placeholder="URL o nombre de página">
             </div>
-        </div>
-
-        {{-- Rules --}}
-        <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-5">
-            <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Reglas del Juego</h3>
-            <p class="text-xs text-gray-500">Contenido HTML que se muestra en la página pública de reglas. Puedes usar etiquetas &lt;h2&gt;, &lt;h3&gt;, &lt;p&gt;, &lt;ul&gt;, &lt;ol&gt;, &lt;li&gt;, &lt;strong&gt;.</p>
             <div>
-                <textarea name="rules_content" rows="15" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none resize-y font-mono">{{ $settings['rules_content'] ?? '' }}</textarea>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">TikTok</label>
+                <div class="relative">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">@</span>
+                    <input type="text" name="tiktok" value="{{ $settings['tiktok'] ?? '' }}" class="w-full pl-8 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none" placeholder="usuario">
+                </div>
             </div>
         </div>
 

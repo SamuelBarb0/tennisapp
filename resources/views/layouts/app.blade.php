@@ -116,16 +116,19 @@
                 <div class="hidden md:flex items-center gap-1">
                     <a href="{{ route('tournaments.index') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('tournaments.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Torneos</a>
                     <a href="{{ route('rankings.index') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('rankings.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Rankings</a>
-                    <a href="{{ route('prizes.index') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('prizes.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Premios</a>
                     <a href="{{ route('rules') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('rules') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Reglas</a>
                 </div>
                 <div class="hidden md:flex items-center gap-3">
                     @auth
-                        <div class="flex items-center gap-2 text-sm">
+                        {{-- Tournament-context points: shown only when viewing a tournament page.
+                             $tournamentContextPoints comes from TournamentController@show. --}}
+                        @isset($tournamentContextPoints)
+                        <div class="flex items-center gap-2 text-sm bg-white/10 px-3 py-1.5 rounded-full" title="Puntos en este torneo">
                             <svg class="w-4 h-4 text-tc-accent" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
-                            <span class="font-bold text-tc-accent">{{ number_format(auth()->user()->points) }}</span>
-                            <span class="text-white/60">pts</span>
+                            <span class="font-bold text-tc-accent">{{ number_format($tournamentContextPoints) }}</span>
+                            <span class="text-white/60 text-xs">pts en este torneo</span>
                         </div>
+                        @endisset
                         <a href="{{ route('profile.show') }}" class="flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium text-white/90 hover:bg-white/10 transition-colors">
                             <div class="w-7 h-7 bg-tc-accent rounded-full flex items-center justify-center text-tc-primary text-xs font-bold">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</div>
                             {{ auth()->user()->name }}
@@ -156,8 +159,12 @@
             <div class="px-4 py-3 space-y-1">
                 <a href="{{ route('tournaments.index') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('tournaments.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Torneos</a>
                 <a href="{{ route('rankings.index') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('rankings.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Rankings</a>
-                <a href="{{ route('prizes.index') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('prizes.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Premios</a>
                 <a href="{{ route('rules') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('rules') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Reglas</a>
+                @isset($tournamentContextPoints)
+                <div class="px-4 py-2 text-xs text-white/60 border-t border-white/10 mt-2 pt-3">
+                    En este torneo: <span class="font-bold text-tc-accent">{{ number_format($tournamentContextPoints) }} pts</span>
+                </div>
+                @endisset
                 @auth
                     <a href="{{ route('profile.show') }}" class="block px-4 py-2 rounded-xl text-sm font-medium text-white/80 hover:bg-white/10">Mi Perfil</a>
                     @if(auth()->user()->is_admin)
@@ -195,29 +202,45 @@
                     <ul class="space-y-2 text-sm text-white/60">
                         <li><a href="{{ route('tournaments.index') }}" class="hover:text-white transition-colors">Torneos</a></li>
                         <li><a href="{{ route('rankings.index') }}" class="hover:text-white transition-colors">Rankings</a></li>
-                        <li><a href="{{ route('prizes.index') }}" class="hover:text-white transition-colors">Premios</a></li>
                     </ul>
                 </div>
                 <div>
                     <h3 class="text-sm font-semibold text-tc-accent mb-3">Soporte</h3>
                     <ul class="space-y-2 text-sm text-white/60">
                         <li><a href="{{ route('rules') }}" class="hover:text-white transition-colors">Reglas del juego</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Términos y condiciones</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Política de privacidad</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">Contacto</a></li>
+                        <li><a href="{{ route('terms') }}" class="hover:text-white transition-colors">Términos y condiciones</a></li>
+                        <li><a href="{{ route('privacy') }}" class="hover:text-white transition-colors">Política de privacidad</a></li>
+                        <li><a href="{{ route('contact') }}" class="hover:text-white transition-colors">Contacto</a></li>
                     </ul>
                 </div>
                 <div>
                     <h3 class="text-sm font-semibold text-tc-accent mb-3">Síguenos</h3>
-                    <div class="flex gap-3">
-                        <a href="#" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 hover:bg-tc-accent hover:text-tc-primary transition-all">
+                    <div class="flex gap-3 flex-wrap">
+                        @php
+                            // Settings keys match the admin form (instagram, twitter, facebook, tiktok).
+                            // Instagram/Twitter are stored as handles ("usuario") so we prefix the URL.
+                            $instaHandle = trim(\App\Models\Setting::get('instagram', ''), '@ ');
+                            $twHandle    = trim(\App\Models\Setting::get('twitter',  ''), '@ ');
+                            $fbValue     = trim(\App\Models\Setting::get('facebook', ''));
+                            $ttHandle    = trim(\App\Models\Setting::get('tiktok',   ''), '@ ');
+                            $socials = [
+                                'twitter'   => $twHandle    ? 'https://twitter.com/'  . $twHandle    : '#',
+                                'instagram' => $instaHandle ? 'https://instagram.com/' . $instaHandle : '#',
+                                'facebook'  => $fbValue && str_starts_with($fbValue, 'http') ? $fbValue : ($fbValue ? 'https://facebook.com/' . $fbValue : '#'),
+                                'tiktok'    => $ttHandle    ? 'https://tiktok.com/@'  . $ttHandle    : '#',
+                            ];
+                        @endphp
+                        <a href="{{ $socials['twitter'] }}" target="_blank" rel="noopener" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 hover:bg-tc-accent hover:text-tc-primary transition-all" aria-label="Twitter">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg>
                         </a>
-                        <a href="#" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 hover:bg-tc-accent hover:text-tc-primary transition-all">
+                        <a href="{{ $socials['instagram'] }}" target="_blank" rel="noopener" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 hover:bg-tc-accent hover:text-tc-primary transition-all" aria-label="Instagram">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
                         </a>
-                        <a href="#" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 hover:bg-tc-accent hover:text-tc-primary transition-all">
+                        <a href="{{ $socials['facebook'] }}" target="_blank" rel="noopener" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 hover:bg-tc-accent hover:text-tc-primary transition-all" aria-label="Facebook">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/></svg>
+                        </a>
+                        <a href="{{ $socials['tiktok'] }}" target="_blank" rel="noopener" class="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 hover:bg-tc-accent hover:text-tc-primary transition-all" aria-label="TikTok">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5.8 20.1a6.34 6.34 0 0 0 10.86-4.43V7.83a8.16 8.16 0 0 0 5 1.61V6.05a4.85 4.85 0 0 1-2.06-.36z"/></svg>
                         </a>
                     </div>
                 </div>

@@ -33,11 +33,31 @@ class BracketTennisScraper
 
     public function draw(string $slug, string $tour): array
     {
+        return $this->fetchAndParse($slug, $tour, fn($html) => $this->parse($html));
+    }
+
+    /**
+     * Extract tournament start/end dates from the page JSON.
+     * Returns ['start' => 'YYYY-MM-DD'|null, 'end' => 'YYYY-MM-DD'|null].
+     */
+    public function dates(string $slug, string $tour): array
+    {
+        return $this->fetchAndParse($slug, $tour, function ($html) {
+            $out = ['start' => null, 'end' => null];
+            if (preg_match('~"startDate":"([0-9-]{10})"~', $html, $m))  $out['start'] = $m[1];
+            if (preg_match('~"endDate":"([0-9-]{10})"~', $html, $m))    $out['end']   = $m[1];
+            return $out;
+        }, cacheSuffix: 'dates');
+    }
+
+    /** Shared HTTP/cache wrapper for both draw() and dates(). */
+    private function fetchAndParse(string $slug, string $tour, callable $parser, string $cacheSuffix = 'draw'): array
+    {
         $slug = trim($slug, '/');
         $tour = strtolower($tour);
-        $cacheKey = 'bt-draw:' . md5($slug . '|' . $tour);
+        $cacheKey = 'bt-' . $cacheSuffix . ':' . md5($slug . '|' . $tour);
 
-        return Cache::store('file')->remember($cacheKey, self::TTL_DRAW, function () use ($slug, $tour) {
+        return Cache::store('file')->remember($cacheKey, self::TTL_DRAW, function () use ($slug, $tour, $parser) {
             $url = strtr(self::URL_TEMPLATE, ['{slug}' => $slug, '{tour}' => $tour]);
             try {
                 $resp = Http::withHeaders([
@@ -56,7 +76,7 @@ class BracketTennisScraper
                 return [];
             }
 
-            return $this->parse($resp->body());
+            return $parser($resp->body());
         });
     }
 

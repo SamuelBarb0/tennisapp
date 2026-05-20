@@ -15,9 +15,16 @@ class TournamentController extends Controller
 {
     public function index(Request $request)
     {
+        // The calendar shows ALL the customer's tournaments — past, in-progress
+        // AND upcoming ones (even before fixtures arrive from api-tennis),
+        // because we already know their dates from bracket.tennis. The state
+        // badge (Próximamente / En vivo / Finalizado) tells the user where
+        // each one stands.
         $query = Tournament::where('is_active', true)
-            ->where('start_date', '>=', '2026-01-01')
-            ->whereHas('matches');
+            ->whereNotNull('api_tournament_key')
+            ->where('api_tournament_key', 'NOT LIKE', 'test-%')
+            ->whereNotNull('start_date');
+
         if ($request->filled('type')) {
             $query->where('type', $request->type);
         }
@@ -310,6 +317,10 @@ class TournamentController extends Controller
             && $tournament->requiresPayment()
             && !$hasPaid
             && !(auth()->check() && auth()->user()->is_admin);
+
+        // Expose `$tournamentContextPoints` to the layout so the header chip
+        // shows points-for-this-tournament instead of the global total.
+        view()->share('tournamentContextPoints', $userTotalPoints);
 
         return view('tournaments.show', compact(
             'tournament', 'matches', 'tournamentRanking',

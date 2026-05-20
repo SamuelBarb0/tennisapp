@@ -51,6 +51,13 @@ Schedule::command('tennis:recompute-status')
     ->dailyAt('03:00')
     ->onOneServer();
 
+// Fill in missing tournament dates from bracket.tennis once a day. This catches
+// tournaments where api-tennis hasn't published fixtures yet but bracket.tennis
+// already shows the official dates (typical ~2-3 weeks before each event).
+Schedule::command('tennis:fill-tournament-dates')
+    ->dailyAt('04:30')
+    ->onOneServer();
+
 // Re-map bracket.tennis slugs once a year on January 1st. When a season
 // rolls over, the same tournaments get new slugs (e.g. roland-garros-2027
 // instead of -2026). --force overwrites the stale 2026 ones.

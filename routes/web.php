@@ -7,7 +7,7 @@ use App\Http\Controllers\PredictionController;
 use App\Http\Controllers\RankingController;
 use App\Http\Controllers\PrizeController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\RulesController;
+use App\Http\Controllers\PageController;
 use App\Http\Controllers\BracketPredictionController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\TournamentController as AdminTournamentController;
@@ -19,7 +19,6 @@ use App\Http\Controllers\Admin\RedemptionController as AdminRedemptionController
 use App\Http\Controllers\Admin\BannerController as AdminBannerController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\SettingController as AdminSettingController;
-use App\Http\Controllers\Admin\ApiSyncController;
 use App\Http\Controllers\Admin\SimulationController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,7 +28,11 @@ Route::get('/tournaments', [TournamentController::class, 'index'])->name('tourna
 Route::get('/tournaments/{tournament:slug}', [TournamentController::class, 'show'])->name('tournaments.show');
 Route::get('/rankings', [RankingController::class, 'index'])->name('rankings.index');
 Route::get('/prizes', [PrizeController::class, 'index'])->name('prizes.index');
-Route::get('/rules', [RulesController::class, 'index'])->name('rules');
+// CMS pages — editable by admin. The slug determines the URL: /reglas, /terminos, etc.
+Route::get('/reglas',     fn() => app(PageController::class)->show('reglas'))->name('rules');
+Route::get('/terminos',   fn() => app(PageController::class)->show('terminos'))->name('terms');
+Route::get('/privacidad', fn() => app(PageController::class)->show('privacidad'))->name('privacy');
+Route::get('/contacto',   fn() => app(PageController::class)->show('contacto'))->name('contact');
 
 // Mercado Pago — webhook is public (CSRF is excluded in bootstrap/app.php)
 Route::post('/payments/mp/webhook', [PaymentController::class, 'webhook'])->name('payments.mp.webhook');
@@ -63,20 +66,25 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::resource('matches', AdminMatchController::class)->except('show');
     Route::get('users', [AdminUserController::class, 'index'])->name('users.index');
     Route::get('users/{user}', [AdminUserController::class, 'show'])->name('users.show');
+    Route::patch('users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+    Route::delete('users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
     Route::post('users/{user}/toggle-block', [AdminUserController::class, 'toggleBlock'])->name('users.toggle-block');
+    Route::post('users/{user}/toggle-admin', [AdminUserController::class, 'toggleAdmin'])->name('users.toggle-admin');
+    Route::post('users/{user}/points', [AdminUserController::class, 'updatePoints'])->name('users.points');
+    Route::post('users/{user}/reset-password', [AdminUserController::class, 'resetPassword'])->name('users.reset-password');
     Route::resource('prizes', AdminPrizeController::class)->except('show');
     Route::get('redemptions', [AdminRedemptionController::class, 'index'])->name('redemptions.index');
     Route::patch('redemptions/{redemption}', [AdminRedemptionController::class, 'updateStatus'])->name('redemptions.update');
     Route::resource('banners', AdminBannerController::class)->except('show');
     Route::patch('banners/{banner}/toggle', [AdminBannerController::class, 'toggle'])->name('banners.toggle');
+
+    // CMS pages — Reglas, Términos, Privacidad, Contacto
+    Route::get('pages',          [\App\Http\Controllers\Admin\PageController::class, 'index'])->name('pages.index');
+    Route::get('pages/{page}',   [\App\Http\Controllers\Admin\PageController::class, 'edit'])->name('pages.edit');
+    Route::patch('pages/{page}', [\App\Http\Controllers\Admin\PageController::class, 'update'])->name('pages.update');
     Route::get('payments', [AdminPaymentController::class, 'index'])->name('payments.index');
     Route::get('settings', [AdminSettingController::class, 'index'])->name('settings.index');
     Route::post('settings', [AdminSettingController::class, 'update'])->name('settings.update');
-
-    // API Sync (Matchstat / Tennis API)
-    Route::get('api-sync', [ApiSyncController::class, 'index'])->name('api-sync.index');
-    Route::post('api-sync/rankings', [ApiSyncController::class, 'syncRankings'])->name('api-sync.rankings');
-    Route::post('api-sync/live', [ApiSyncController::class, 'syncLive'])->name('api-sync.live');
 
     // Simulation (test tournaments)
     Route::post('simulate/next-round', [SimulationController::class, 'simulateNextRound'])->name('simulate.next-round');

@@ -23,12 +23,72 @@
             <p class="text-sm text-gray-500">{{ $user->email }}</p>
             <p class="text-xs text-gray-400 mt-1">Registrado: {{ $user->created_at->format('d/m/Y H:i') }}</p>
         </div>
-        <form action="{{ route('admin.users.toggle-block', $user) }}" method="POST">
-            @csrf @method('PATCH')
-            <button class="px-4 py-2 text-sm font-medium rounded-xl transition-colors {{ $user->is_blocked ? 'text-green-600 bg-green-50 hover:bg-green-100' : 'text-red-600 bg-red-50 hover:bg-red-100' }}">
-                {{ $user->is_blocked ? 'Desbloquear usuario' : 'Bloquear usuario' }}
+        <div class="flex flex-wrap gap-2" x-data="{ panel: null }">
+            <form action="{{ route('admin.users.toggle-block', $user) }}" method="POST">
+                @csrf
+                <button class="px-3 py-2 text-xs font-medium rounded-xl transition-colors {{ $user->is_blocked ? 'text-green-600 bg-green-50 hover:bg-green-100' : 'text-red-600 bg-red-50 hover:bg-red-100' }}">
+                    {{ $user->is_blocked ? 'Desbloquear' : 'Bloquear' }}
+                </button>
+            </form>
+            <form action="{{ route('admin.users.toggle-admin', $user) }}" method="POST"
+                  onsubmit="return confirm('{{ $user->is_admin ? '¿Quitar permisos de admin?' : '¿Hacer administrador?' }}')">
+                @csrf
+                <button class="px-3 py-2 text-xs font-medium rounded-xl transition-colors {{ $user->is_admin ? 'text-orange-600 bg-orange-50 hover:bg-orange-100' : 'text-purple-600 bg-purple-50 hover:bg-purple-100' }}">
+                    {{ $user->is_admin ? 'Quitar admin' : 'Hacer admin' }}
+                </button>
+            </form>
+            <button @click="panel = panel === 'points' ? null : 'points'" class="px-3 py-2 text-xs font-medium rounded-xl text-tc-primary bg-tc-primary/10 hover:bg-tc-primary/20">
+                Ajustar puntos
             </button>
-        </form>
+            <button @click="panel = panel === 'edit' ? null : 'edit'" class="px-3 py-2 text-xs font-medium rounded-xl text-gray-700 bg-gray-100 hover:bg-gray-200">
+                Editar datos
+            </button>
+            <button @click="panel = panel === 'pwd' ? null : 'pwd'" class="px-3 py-2 text-xs font-medium rounded-xl text-gray-700 bg-gray-100 hover:bg-gray-200">
+                Cambiar contraseña
+            </button>
+            <form action="{{ route('admin.users.destroy', $user) }}" method="POST"
+                  onsubmit="return confirm('¿Eliminar permanentemente a {{ $user->name }}? Esta acción no se puede deshacer.')">
+                @csrf @method('DELETE')
+                <button class="px-3 py-2 text-xs font-medium rounded-xl text-red-700 bg-red-100 hover:bg-red-200">
+                    Eliminar
+                </button>
+            </form>
+
+            {{-- Panels --}}
+            <div x-show="panel === 'points'" x-cloak class="basis-full mt-3">
+                <form action="{{ route('admin.users.points', $user) }}" method="POST" class="flex gap-2 items-end bg-tc-primary/5 p-3 rounded-xl">
+                    @csrf
+                    <div class="flex-1">
+                        <label class="block text-xs text-gray-600 mb-1">Nuevo total de puntos</label>
+                        <input type="number" name="points" value="{{ $user->points ?? 0 }}" min="0" required class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
+                    <button class="px-4 py-2 text-sm font-bold text-white bg-tc-primary rounded-lg hover:bg-tc-primary/90">Guardar</button>
+                </form>
+            </div>
+
+            <div x-show="panel === 'edit'" x-cloak class="basis-full mt-3">
+                <form action="{{ route('admin.users.update', $user) }}" method="POST" class="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded-xl">
+                    @csrf @method('PATCH')
+                    <input type="text" name="name" placeholder="Nombre" value="{{ $user->name }}" required class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    <input type="text" name="last_name" placeholder="Apellido" value="{{ $user->last_name }}" class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    <input type="email" name="email" placeholder="Email" value="{{ $user->email }}" required class="px-3 py-2 text-sm border border-gray-200 rounded-lg col-span-2">
+                    <input type="text" name="phone" placeholder="Celular" value="{{ $user->phone }}" class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    <input type="text" name="city" placeholder="Ciudad" value="{{ $user->city }}" class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    <button class="col-span-2 px-4 py-2 text-sm font-bold text-white bg-tc-primary rounded-lg hover:bg-tc-primary/90">Guardar cambios</button>
+                </form>
+            </div>
+
+            <div x-show="panel === 'pwd'" x-cloak class="basis-full mt-3">
+                <form action="{{ route('admin.users.reset-password', $user) }}" method="POST" class="flex gap-2 items-end bg-gray-50 p-3 rounded-xl">
+                    @csrf
+                    <div class="flex-1">
+                        <label class="block text-xs text-gray-600 mb-1">Nueva contraseña</label>
+                        <input type="text" name="password" minlength="8" required placeholder="Mínimo 8 caracteres" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
+                    <button class="px-4 py-2 text-sm font-bold text-white bg-tc-primary rounded-lg hover:bg-tc-primary/90">Restablecer</button>
+                </form>
+            </div>
+        </div>
     </div>
 
     {{-- Stats --}}
