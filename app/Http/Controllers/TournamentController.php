@@ -56,6 +56,13 @@ class TournamentController extends Controller
                     : (str_starts_with($t->type, 'WTA') ? 1 : 2)
             )->first();
             $primary->setAttribute('family_tours', $siblings->map(fn($t) => $t->tour_code)->unique()->values()->all());
+            // Pair each tour code with its full type label (e.g. "ATP" → "ATP Masters 1000")
+            // so the calendar can render the exact tier chip per sibling, not just the tour.
+            $primary->setAttribute('family_types', $siblings
+                ->sortBy(fn($t) => str_starts_with($t->type, 'ATP') ? 0 : (str_starts_with($t->type, 'WTA') ? 1 : 2))
+                ->map(fn($t) => ['tour' => $t->tour_code, 'type' => $t->type])
+                ->values()
+                ->all());
             $primary->setAttribute('family_ids', $siblings->pluck('id')->all());
             return $primary;
         })->values();

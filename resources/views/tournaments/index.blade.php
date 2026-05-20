@@ -105,15 +105,16 @@
                         <div class="flex items-center gap-2 flex-wrap mb-1">
                             <h3 class="font-bold text-base sm:text-lg group-hover:text-tc-primary transition-colors truncate">{{ $tournament->name }}</h3>
                             @php
-                                // When a family has both ATP and WTA siblings the controller attaches `family_tours`.
-                                // Show one chip per tour so users can tell at a glance that the event has both draws.
-                                $tourCodes = $tournament->family_tours ?? [$tournament->tour_code];
+                                // When the family was grouped we get the full per-sibling type (e.g. "ATP Masters 1000",
+                                // "WTA 1000"). For solo tournaments we synthesize one entry from the row itself.
+                                $typeChips = $tournament->family_types
+                                    ?? [['tour' => $tournament->tour_code, 'type' => $tournament->type]];
                             @endphp
-                            @foreach($tourCodes as $tourCode)
+                            @foreach($typeChips as $chip)
                                 <span class="px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest rounded-full
-                                    {{ $tourCode === 'GS' ? 'bg-yellow-100 text-yellow-700' : '' }}
-                                    {{ $tourCode === 'ATP' ? 'bg-blue-100 text-blue-700' : '' }}
-                                    {{ $tourCode === 'WTA' ? 'bg-pink-100 text-pink-700' : '' }}">{{ $tourCode }}</span>
+                                    {{ $chip['tour'] === 'GS' ? 'bg-yellow-100 text-yellow-700' : '' }}
+                                    {{ $chip['tour'] === 'ATP' ? 'bg-blue-100 text-blue-700' : '' }}
+                                    {{ $chip['tour'] === 'WTA' ? 'bg-pink-100 text-pink-700' : '' }}">{{ $chip['type'] }}</span>
                             @endforeach
                         </div>
                         <div class="text-xs text-gray-500 flex items-center gap-3 flex-wrap">
