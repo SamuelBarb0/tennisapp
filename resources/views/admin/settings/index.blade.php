@@ -98,6 +98,36 @@
             </div>
         </div>
 
+        {{-- Feature toggles — currently controls whether Premios / global points are
+             visible in the public site. Hidden input before each checkbox ensures
+             unchecked state still submits "0" (HTML omits unchecked checkboxes). --}}
+        <div class="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm space-y-5">
+            <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Visibilidad de funciones</h3>
+            <p class="text-xs text-gray-500">Activa o desactiva secciones del sitio público sin tocar código.</p>
+
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="hidden" name="prizes_enabled" value="0">
+                <input type="checkbox" name="prizes_enabled" value="1"
+                       {{ ($settings['prizes_enabled'] ?? '0') === '1' ? 'checked' : '' }}
+                       class="mt-0.5 w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary">
+                <span class="text-sm">
+                    <span class="font-medium text-gray-800">Mostrar sección de Premios</span>
+                    <span class="block text-[11px] text-gray-500">Habilita la pestaña "Premios" en la barra de navegación y el pie de página, junto con la página /prizes para canjear puntos.</span>
+                </span>
+            </label>
+
+            <label class="flex items-start gap-3 cursor-pointer">
+                <input type="hidden" name="global_points_enabled" value="0">
+                <input type="checkbox" name="global_points_enabled" value="1"
+                       {{ ($settings['global_points_enabled'] ?? '0') === '1' ? 'checked' : '' }}
+                       class="mt-0.5 w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary">
+                <span class="text-sm">
+                    <span class="font-medium text-gray-800">Mostrar puntos totales del usuario en el header</span>
+                    <span class="block text-[11px] text-gray-500">Si se activa, en la barra superior aparece la suma total de puntos del usuario (no solo los del torneo actual).</span>
+                </span>
+            </label>
+        </div>
+
         <div class="flex items-center gap-3">
             <button type="submit" class="px-6 py-2.5 bg-tc-primary text-white rounded-xl text-sm font-medium hover:bg-tc-primary-hover transition-colors">Guardar configuración</button>
         </div>

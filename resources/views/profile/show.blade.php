@@ -100,13 +100,21 @@
 
 {{-- ═══════ KPIs ═══════ --}}
 <section class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-10 mb-10">
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    @php
+        // Same toggle as the navbar: when disabled, the user's all-tournaments total
+        // is hidden everywhere in the public site, including this profile KPI tile.
+        // Configured at /admin/settings → "Visibilidad de funciones".
+        $showGlobalPoints = \App\Models\Setting::get('global_points_enabled', '0') === '1';
+    @endphp
+    <div class="grid grid-cols-2 {{ $showGlobalPoints ? 'md:grid-cols-4' : 'md:grid-cols-3' }} gap-3">
+        @if($showGlobalPoints)
         <div class="kpi-card">
             <div class="kpi-bg text-tc-accent">★</div>
             <div class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Puntos totales</div>
             <div class="text-2xl md:text-3xl font-black text-tc-primary mt-1 tabular-nums">{{ number_format($totalPointsEarned) }}</div>
             <div class="text-[10px] text-gray-400 mt-1">{{ number_format($user->points) }} acumulados global</div>
         </div>
+        @endif
         <div class="kpi-card">
             <div class="kpi-bg text-tc-primary">⚏</div>
             <div class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Brackets</div>

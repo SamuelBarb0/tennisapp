@@ -104,6 +104,13 @@
         </div>
     </div>
 
+    @php
+        // Admin-controlled visibility toggles (configured in /admin/settings).
+        // Stored as "1"/"0" strings via the Setting model.
+        $showPrizes       = \App\Models\Setting::get('prizes_enabled',        '0') === '1';
+        $showGlobalPoints = \App\Models\Setting::get('global_points_enabled', '0') === '1';
+    @endphp
+
     {{-- Navigation --}}
     <nav class="bg-tc-primary sticky top-0 z-50 shadow-lg text-white" x-data="{ mobileOpen: false }">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -116,10 +123,23 @@
                 <div class="hidden md:flex items-center gap-1">
                     <a href="{{ route('tournaments.index') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('tournaments.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Torneos</a>
                     <a href="{{ route('rankings.index') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('rankings.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Rankings</a>
+                    @if($showPrizes)
+                    <a href="{{ route('prizes.index') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('prizes.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Premios</a>
+                    @endif
                     <a href="{{ route('rules') }}" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ request()->routeIs('rules') ? 'bg-white text-tc-primary' : 'text-white/80 hover:text-white hover:bg-white/10' }}">Reglas</a>
                 </div>
                 <div class="hidden md:flex items-center gap-3">
                     @auth
+                        {{-- Global user points: total accumulated across all tournaments.
+                             Hidden by default — the admin re-enables it from /admin/settings. --}}
+                        @if($showGlobalPoints)
+                        <div class="flex items-center gap-2 text-sm bg-white/10 px-3 py-1.5 rounded-full" title="Puntos totales">
+                            <svg class="w-4 h-4 text-tc-accent" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+                            <span class="font-bold text-tc-accent">{{ number_format(auth()->user()->points ?? 0) }}</span>
+                            <span class="text-white/60 text-xs">pts</span>
+                        </div>
+                        @endif
+
                         {{-- Tournament-context points: shown only when viewing a tournament page.
                              $tournamentContextPoints comes from TournamentController@show. --}}
                         @isset($tournamentContextPoints)
@@ -159,6 +179,9 @@
             <div class="px-4 py-3 space-y-1">
                 <a href="{{ route('tournaments.index') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('tournaments.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Torneos</a>
                 <a href="{{ route('rankings.index') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('rankings.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Rankings</a>
+                @if($showPrizes)
+                <a href="{{ route('prizes.index') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('prizes.*') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Premios</a>
+                @endif
                 <a href="{{ route('rules') }}" class="block px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('rules') ? 'bg-white text-tc-primary' : 'text-white/80 hover:bg-white/10' }}">Reglas</a>
                 @isset($tournamentContextPoints)
                 <div class="px-4 py-2 text-xs text-white/60 border-t border-white/10 mt-2 pt-3">
@@ -202,6 +225,9 @@
                     <ul class="space-y-2 text-sm text-white/60">
                         <li><a href="{{ route('tournaments.index') }}" class="hover:text-white transition-colors">Torneos</a></li>
                         <li><a href="{{ route('rankings.index') }}" class="hover:text-white transition-colors">Rankings</a></li>
+                        @if($showPrizes)
+                        <li><a href="{{ route('prizes.index') }}" class="hover:text-white transition-colors">Premios</a></li>
+                        @endif
                     </ul>
                 </div>
                 <div>
