@@ -30,8 +30,9 @@ class BannerController extends Controller
     public function store(Request $request)
     {
         $data = $this->validateBanner($request);
-        $data['is_active'] = $request->boolean('is_active');
-        $data['is_hero']   = $request->boolean('is_hero');
+        $data['is_active']  = $request->boolean('is_active');
+        $data['is_hero']    = $request->boolean('is_hero');
+        $data['show_stats'] = $request->boolean('show_stats');
 
         $this->enforceSingleInstanceSlot($data['slot']);
 
@@ -54,8 +55,9 @@ class BannerController extends Controller
     public function update(Request $request, Banner $banner)
     {
         $data = $this->validateBanner($request);
-        $data['is_active'] = $request->boolean('is_active');
-        $data['is_hero']   = $request->boolean('is_hero');
+        $data['is_active']  = $request->boolean('is_active');
+        $data['is_hero']    = $request->boolean('is_hero');
+        $data['show_stats'] = $request->boolean('show_stats');
 
         $this->enforceSingleInstanceSlot($data['slot'], $banner->id);
         if ($data['slot'] === 'home_hero') $data['is_hero'] = true;
@@ -92,6 +94,7 @@ class BannerController extends Controller
             'link'       => 'nullable|string',
             'is_active'  => 'boolean',
             'is_hero'    => 'boolean',
+            'show_stats' => 'boolean',
             'order'      => 'integer',
             'media_type' => 'required|in:image,video',
             'media_url'  => 'nullable|url',

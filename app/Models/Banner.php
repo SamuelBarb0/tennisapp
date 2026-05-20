@@ -8,7 +8,7 @@ class Banner extends Model
 {
     protected $fillable = [
         'title', 'subtitle', 'image', 'media_type', 'media_url',
-        'link', 'is_active', 'is_hero', 'slot', 'order',
+        'link', 'is_active', 'is_hero', 'slot', 'show_stats', 'order',
     ];
 
     /**
@@ -50,8 +50,9 @@ class Banner extends Model
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean',
-            'is_hero'   => 'boolean',
+            'is_active'  => 'boolean',
+            'is_hero'    => 'boolean',
+            'show_stats' => 'boolean',
         ];
     }
 
@@ -71,11 +72,14 @@ class Banner extends Model
         $row = self::where('slot', $slot)->where('is_active', true)->first();
 
         return (object) [
-            'title'     => $row?->title     ?: ($defaults['default_title']    ?? ''),
-            'subtitle'  => $row?->subtitle  ?: ($defaults['default_subtitle'] ?? ''),
-            'image_url' => $row?->media_src,
-            'link'      => $row?->link,
-            'exists'    => (bool) $row,
+            'title'      => $row?->title    ?: ($defaults['default_title']    ?? ''),
+            'subtitle'   => $row?->subtitle ?: ($defaults['default_subtitle'] ?? ''),
+            'image_url'  => $row?->media_src,
+            'link'       => $row?->link,
+            // Whether the slot's stats block is visible. Defaults to true so
+            // un-customized heroes keep their original behavior.
+            'show_stats' => $row ? (bool) $row->show_stats : true,
+            'exists'     => (bool) $row,
         ];
     }
 }

@@ -25,107 +25,76 @@
     <div class="relative">
         <div class="relative overflow-hidden" style="min-height: 480px;">
 
-            {{-- ★ Slide 0: Hero — admin-editable banner OR default "Predice. Compite. Gana." ★ --}}
+            {{-- ★ Slide 0: Hero del home. La estructura (gradiente azul, orbes,
+                 botones, stats) NUNCA cambia. El admin solo puede editar el
+                 título y subtítulo desde /admin/banners → slot "home_hero",
+                 y opcionalmente ocultar las estadísticas con `show_stats`. ★ --}}
             <div x-show="current === 0"
                  x-transition:enter="transition ease-out duration-500"
                  x-transition:enter-start="opacity-0"
                  x-transition:enter-end="opacity-100"
-                 class="absolute inset-0 overflow-hidden {{ $heroBanner ? '' : 'bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark' }}">
+                 class="absolute inset-0 bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark overflow-hidden">
+                {{-- Orbes decorativos --}}
+                <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
+                <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
 
-                @if($heroBanner)
-                    {{-- Admin-managed hero: image or video background with optional title/subtitle overlay --}}
-                    @php $heroSrc = $heroBanner->media_src; @endphp
-                    @if($heroBanner->link)<a href="{{ $heroBanner->link }}" class="block h-full w-full">@endif
-                    @if($heroBanner->media_type === 'video' && $heroSrc)
-                        <video src="{{ $heroSrc }}" autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover"></video>
-                    @elseif($heroSrc)
-                        <img src="{{ $heroSrc }}" alt="{{ $heroBanner->title }}" class="absolute inset-0 w-full h-full object-cover">
-                    @else
-                        <div class="absolute inset-0 bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark"></div>
-                    @endif
-                    @if($heroBanner->title || $heroBanner->subtitle)
-                    <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-transparent flex items-center">
-                        <div class="max-w-7xl mx-auto px-6 sm:px-12 md:px-20 w-full">
-                            <div class="max-w-2xl">
-                                @if($heroBanner->title)
-                                    <h1 class="text-4xl md:text-6xl font-black text-white tracking-tight mb-4 drop-shadow-lg">{{ $heroBanner->title }}</h1>
-                                @endif
-                                @if($heroBanner->subtitle)
-                                    <p class="text-lg md:text-xl text-white/90 drop-shadow max-w-xl">{{ $heroBanner->subtitle }}</p>
-                                @endif
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20 relative">
+                    <div class="text-center fade-in">
+                        <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
+                            @php
+                                // The last word stays yellow ("Gana.") so the rhythm of the
+                                // original headline survives whatever title the admin sets.
+                                $heroTitle = $homeHero->title ?: 'Predice. Compite. Gana.';
+                                $words     = preg_split('/\s+/', trim($heroTitle));
+                                $lastWord  = array_pop($words);
+                                $firstPart = implode(' ', $words);
+                            @endphp
+                            {{ $firstPart }} @if($firstPart)<span class="text-tc-accent">{{ $lastWord }}</span>@else{{ $lastWord }}@endif
+                        </h1>
+                        <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
+                            {{ $homeHero->subtitle ?: 'Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.' }}
+                        </p>
+                        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                            @guest
+                                <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
+                                    Comenzar gratis
+                                </a>
+                                <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
+                                    Ver torneos
+                                </a>
+                            @else
+                                <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
+                                    Hacer pronósticos
+                                </a>
+                                <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
+                                    ¿Cómo funciona?
+                                </a>
+                            @endguest
+                        </div>
+                        {{-- Stats — hidden when the admin disabled `show_stats` on the
+                             home_hero banner (defaults to true so existing behavior is preserved). --}}
+                        @if($homeHero->show_stats ?? true)
+                        <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto">
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['tournaments'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Torneos</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['players'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Jugadores</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['total_points'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Puntos repartidos</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['users'] }}</div>
+                                <div class="text-xs text-blue-200 mt-1">Participantes</div>
                             </div>
                         </div>
+                        @endif
                     </div>
-                    @endif
-                    @if($heroBanner->link)</a>@endif
-                @else
-                    {{-- Default hero (shown when no banner has is_hero=true) --}}
-                    {{-- Orbes decorativos --}}
-                    <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
-                    <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
-
-                    @if($homeHero->image_url)
-                        {{-- Optional background image overlay when admin uploaded one. --}}
-                        <div class="absolute inset-0">
-                            <img src="{{ $homeHero->image_url }}" alt="" class="w-full h-full object-cover opacity-40">
-                            <div class="absolute inset-0 bg-gradient-to-br from-tc-primary/80 via-tc-primary-hover/70 to-tc-primary-dark/80"></div>
-                        </div>
-                    @endif
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20 relative">
-                        <div class="text-center fade-in">
-                            <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
-                                {{-- Highlight the last word in tc-accent yellow so the customized title
-                                     keeps the same visual rhythm as the original "Predice. Compite. Gana." --}}
-                                @php
-                                    $heroTitle = $homeHero->title ?: 'Predice. Compite. Gana.';
-                                    $words = preg_split('/\s+/', trim($heroTitle));
-                                    $lastWord = array_pop($words);
-                                    $firstPart = implode(' ', $words);
-                                @endphp
-                                {{ $firstPart }} @if($firstPart)<span class="text-tc-accent">{{ $lastWord }}</span>@else{{ $lastWord }}@endif
-                            </h1>
-                            <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
-                                {{ $homeHero->subtitle ?: 'Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.' }}
-                            </p>
-                            <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                                @guest
-                                    <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
-                                        Comenzar gratis
-                                    </a>
-                                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
-                                        Ver torneos
-                                    </a>
-                                @else
-                                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
-                                        Hacer pronósticos
-                                    </a>
-                                    <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
-                                        ¿Cómo funciona?
-                                    </a>
-                                @endguest
-                            </div>
-                            {{-- Stats --}}
-                            <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto">
-                                <div class="text-center">
-                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['tournaments'] }}</div>
-                                    <div class="text-xs text-blue-200 mt-1">Torneos</div>
-                                </div>
-                                <div class="text-center">
-                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['players'] }}</div>
-                                    <div class="text-xs text-blue-200 mt-1">Jugadores</div>
-                                </div>
-                                <div class="text-center">
-                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['total_points'] }}</div>
-                                    <div class="text-xs text-blue-200 mt-1">Puntos repartidos</div>
-                                </div>
-                                <div class="text-center">
-                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['users'] }}</div>
-                                    <div class="text-xs text-blue-200 mt-1">Participantes</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                @endif
+                </div>
             </div>
 
             {{-- ★ Slides 1+: Admin banners ★ --}}
