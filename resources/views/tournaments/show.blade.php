@@ -1374,8 +1374,9 @@
     @endif
 </div>
 
-{{-- No matches --}}
-@if($orderedRounds->count() === 0)
+{{-- "No matches" empty state. Hidden when the paywall is active — otherwise
+     the empty state stacks below the paywall card, which looks broken. --}}
+@if($orderedRounds->count() === 0 && !($needsPayment ?? false))
 <div class="bg-gradient-to-b from-gray-50 to-gray-100 min-h-[50vh] flex items-center justify-center">
     <div class="text-center">
         <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gray-100 flex items-center justify-center">
