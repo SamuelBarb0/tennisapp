@@ -471,6 +471,12 @@
     {{-- ═══════ TABS ATP/WTA (only when tournament has siblings) ═══════ --}}
     @php
         $siblings = $tournament->siblings()->where('is_active', true)->get();
+        // When the user still owes payment, the sibling tab must NOT be a working
+        // link — otherwise they could jump to a non-premium sibling and predict
+        // for free. (The backend `requiresPayment()` now treats the whole family
+        // as premium, so even the direct URL is blocked, but we still surface the
+        // lock visually so the UI matches the rule.)
+        $siblingsLocked = $needsPayment ?? false;
     @endphp
     @if($siblings->isNotEmpty())
     <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
@@ -481,13 +487,26 @@
                 {{ $tournament->tour_code }} · Bracket
             </a>
             @foreach($siblings as $sibling)
-            <a href="{{ route('tournaments.show', $sibling) }}"
-               class="px-5 py-2 rounded-full text-sm font-bold transition-all
-                      text-gray-600 hover:bg-gray-100">
-                {{ $sibling->tour_code }} · Bracket
-            </a>
+                @if($siblingsLocked)
+                    <span title="Desbloquea con un único pago para acceder a ambos brackets"
+                          class="px-5 py-2 rounded-full text-sm font-bold transition-all text-gray-400 bg-gray-50 cursor-not-allowed inline-flex items-center gap-1.5 select-none">
+                        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                        </svg>
+                        {{ $sibling->tour_code }} · Bracket
+                    </span>
+                @else
+                    <a href="{{ route('tournaments.show', $sibling) }}"
+                       class="px-5 py-2 rounded-full text-sm font-bold transition-all
+                              text-gray-600 hover:bg-gray-100">
+                        {{ $sibling->tour_code }} · Bracket
+                    </a>
+                @endif
             @endforeach
         </div>
+        @if($siblingsLocked)
+            <p class="text-[11px] text-gray-500 mt-2">El otro bracket se desbloquea automáticamente al completar el pago.</p>
+        @endif
     </div>
     @endif
 
@@ -533,7 +552,7 @@
             <div class="px-8 py-8 text-center border-b border-gray-100">
                 <div class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Acceso completo</div>
                 <div class="flex items-baseline justify-center gap-1">
-                    <span class="text-5xl font-black text-tc-primary tabular-nums">${{ number_format($tournament->price, 0, ',', '.') }}</span>
+                    <span class="text-5xl font-black text-tc-primary tabular-nums">${{ number_format($tournament->effective_price, 0, ',', '.') }}</span>
                     <span class="text-lg font-bold text-gray-400">COP</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-2">Pago único · Acceso indefinido</p>

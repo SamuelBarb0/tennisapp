@@ -95,11 +95,47 @@ class Tournament extends Model
 
     /**
      * True when this tournament requires payment to predict.
-     * Free tournaments (is_premium=false OR price not set) never require payment.
+     *
+     * If ANY tournament in the family (ATP+WTA siblings of the same event)
+     * is premium, the whole family is treated as premium. Otherwise users could
+     * pay for ATP Roland Garros, then jump to the WTA sibling (which the admin
+     * may have left as free) and predict without paying. The mirror of this is
+     * `hasUserPaid()` — paying for any family member unlocks all of them.
      */
     public function requiresPayment(): bool
     {
-        return $this->is_premium && $this->price > 0;
+        if ($this->is_premium && $this->price > 0) return true;
+
+        if ($this->family_slug) {
+            return Tournament::where('family_slug', $this->family_slug)
+                ->where('id', '!=', $this->id)
+                ->where('is_premium', true)
+                ->where('price', '>', 0)
+                ->exists();
+        }
+
+        return false;
+    }
+
+    /**
+     * The effective price for this tournament — when the row itself isn't
+     * premium but a family sibling is, return the sibling's price so the
+     * paywall shows the correct amount.
+     */
+    public function getEffectivePriceAttribute(): float
+    {
+        if ($this->is_premium && $this->price > 0) return (float) $this->price;
+
+        if ($this->family_slug) {
+            $sibling = Tournament::where('family_slug', $this->family_slug)
+                ->where('id', '!=', $this->id)
+                ->where('is_premium', true)
+                ->where('price', '>', 0)
+                ->first();
+            if ($sibling) return (float) $sibling->price;
+        }
+
+        return (float) $this->price;
     }
 
     /**
