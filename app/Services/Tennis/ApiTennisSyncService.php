@@ -1261,12 +1261,15 @@ class ApiTennisSyncService
             if ($i === count($rounds) - 1) break; // final has no next round
             $nextRound = $rounds[$i + 1];
 
-            // Pending matches in this round with score 0-0 or null AND both players present.
+            // Look for matches that COULD be unreported walkovers: both players
+            // are known, but the match has no real winner and no real score.
+            // Covers pending matches AND matches the API marked finished but left
+            // winner_id NULL (which is what we've seen in the wild for walkovers).
             $pending = TennisMatch::where('tournament_id', $tournament->id)
                 ->where('round', $round)
-                ->where('status', 'pending')
                 ->whereNotNull('player1_id')
                 ->whereNotNull('player2_id')
+                ->whereNull('winner_id')
                 ->where(function ($q) {
                     $q->whereNull('score')->orWhere('score', '0-0')->orWhereRaw("REPLACE(score,' ','') = '0-0'");
                 })
