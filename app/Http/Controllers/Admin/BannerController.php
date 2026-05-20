@@ -9,11 +9,26 @@ use Illuminate\Http\Request;
 class BannerController extends Controller
 {
     /**
-     * List banners grouped by slot so the admin sees a section per page:
-     * "Carrusel del Home", "Hero del Home", "Hero de Premios", etc.
+     * List banners grouped by slot. For single-instance slots (heros) we
+     * auto-seed a placeholder row using the slot's defaults so the admin
+     * always sees an editable row instead of an empty section + "Crear" CTA.
      */
     public function index()
     {
+        foreach (Banner::SLOTS as $slotKey => $cfg) {
+            if (($cfg['allows_many'] ?? false)) continue;
+            Banner::firstOrCreate(
+                ['slot' => $slotKey],
+                [
+                    'title'      => $cfg['default_title']    ?? '',
+                    'subtitle'   => $cfg['default_subtitle'] ?? '',
+                    'media_type' => 'image',
+                    'is_active'  => true,
+                    'show_stats' => true,
+                ]
+            );
+        }
+
         $bannersBySlot = Banner::orderBy('order')->get()->groupBy('slot');
         return view('admin.banners.index', compact('bannersBySlot'));
     }
@@ -71,6 +86,15 @@ class BannerController extends Controller
 
     public function destroy(Banner $banner)
     {
+        // Hero slots are fixed page sections — never delete them via this route
+        // even if a URL-only request gets through. Index will recreate any
+        // accidentally deleted row, but we'd rather just block it here.
+        $cfg = Banner::SLOTS[$banner->slot] ?? null;
+        if ($cfg && !($cfg['allows_many'] ?? false)) {
+            return redirect()->route('admin.banners.index')
+                ->with('success', 'Este banner es una sección fija y no se puede eliminar.');
+        }
+
         $banner->delete();
         return redirect()->route('admin.banners.index')->with('success', 'Banner eliminado.');
     }

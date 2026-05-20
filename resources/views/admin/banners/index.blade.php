@@ -17,26 +17,30 @@
     @foreach(\App\Models\Banner::SLOTS as $slotKey => $slotCfg)
     @php $slotBanners = $bannersBySlot[$slotKey] ?? collect(); @endphp
 
+    @php $allowsMany = $slotCfg['allows_many'] ?? false; @endphp
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {{-- Section header --}}
+        {{-- Section header. Single-instance slots (heros) don't have a "+ Nuevo"
+             button — they always show their one editable row. --}}
         <div class="flex items-start justify-between gap-4 px-6 py-4 border-b border-gray-100 bg-gray-50/50">
             <div class="min-w-0">
                 <h3 class="text-base font-bold text-gray-800">{{ $slotCfg['label'] }}</h3>
                 <p class="text-xs text-gray-500 mt-0.5">{{ $slotCfg['description'] }}</p>
-                @if(!($slotCfg['allows_many'] ?? false))
-                    <span class="inline-block mt-1.5 px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest rounded">Único</span>
+                @if(!$allowsMany)
+                    <span class="inline-block mt-1.5 px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest rounded">Único — solo editable</span>
                 @endif
             </div>
+            @if($allowsMany)
             <a href="{{ route('admin.banners.create', ['slot' => $slotKey]) }}"
                class="shrink-0 px-4 py-2 bg-tc-primary text-white rounded-lg text-xs font-medium hover:bg-tc-primary-hover transition-colors whitespace-nowrap">
                 + Nuevo
             </a>
+            @endif
         </div>
 
         {{-- Section table --}}
         @if($slotBanners->isEmpty())
             <div class="px-6 py-10 text-center text-sm text-gray-400">
-                Aún no hay banners en esta sección. Se mostrará el texto por defecto.
+                Aún no hay banners en esta sección.
             </div>
         @else
         <div class="overflow-x-auto">
@@ -45,7 +49,7 @@
                     <tr class="border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase">
                         <th class="text-left px-6 py-3">Título</th>
                         <th class="text-left px-6 py-3">Subtítulo</th>
-                        @if($slotCfg['allows_many'] ?? false)
+                        @if($allowsMany)
                         <th class="text-left px-6 py-3">Orden</th>
                         @endif
                         <th class="text-left px-6 py-3">Estado</th>
@@ -68,7 +72,7 @@
                             </div>
                         </td>
                         <td class="px-6 py-4 text-sm text-gray-500">{{ Str::limit($banner->subtitle, 40) }}</td>
-                        @if($slotCfg['allows_many'] ?? false)
+                        @if($allowsMany)
                         <td class="px-6 py-4 text-sm font-medium">{{ $banner->order }}</td>
                         @endif
                         <td class="px-6 py-4">
@@ -82,10 +86,13 @@
                         <td class="px-6 py-4 text-right">
                             <div class="flex items-center justify-end gap-2">
                                 <a href="{{ route('admin.banners.edit', $banner) }}" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Editar</a>
+                                {{-- Hero slots can't be deleted — they're fixed page sections. --}}
+                                @if($allowsMany)
                                 <form action="{{ route('admin.banners.destroy', $banner) }}" method="POST" x-data @submit.prevent="if(confirm('¿Eliminar este banner?')) $el.submit()">
                                     @csrf @method('DELETE')
                                     <button class="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">Eliminar</button>
                                 </form>
+                                @endif
                             </div>
                         </td>
                     </tr>
