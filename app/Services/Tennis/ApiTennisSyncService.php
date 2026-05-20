@@ -42,31 +42,31 @@ class ApiTennisSyncService
      */
     private const COVERED = [
         // Grand Slams
-        ['needle' => 'Australian Open', 'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA']],
-        ['needle' => 'French Open',     'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA']],
-        ['needle' => 'Wimbledon',       'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA']],
-        ['needle' => 'US Open',         'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA']],
+        ['needle' => 'Australian Open', 'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA'], 'city' => 'Melbourne',  'country' => 'Australia',      'surface' => 'Dura'],
+        ['needle' => 'French Open',     'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA'], 'city' => 'Paris',      'country' => 'Francia',        'surface' => 'Arcilla'],
+        ['needle' => 'Wimbledon',       'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA'], 'city' => 'Londres',    'country' => 'Reino Unido',    'surface' => 'Hierba'],
+        ['needle' => 'US Open',         'tier' => 'Grand Slam',       'tours' => ['ATP', 'WTA'], 'city' => 'Nueva York', 'country' => 'Estados Unidos', 'surface' => 'Dura'],
         // ATP Masters 1000 (9)
-        ['needle' => 'Indian Wells',    'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Miami',           'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Monte Carlo',     'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Madrid',          'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Rome',            'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Montreal',        'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Cincinnati',      'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Shanghai',        'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
-        ['needle' => 'Paris',           'tier' => 'ATP Masters 1000', 'tours' => ['ATP']],
+        ['needle' => 'Indian Wells',    'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Indian Wells', 'country' => 'Estados Unidos', 'surface' => 'Dura'],
+        ['needle' => 'Miami',           'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Miami',        'country' => 'Estados Unidos', 'surface' => 'Dura'],
+        ['needle' => 'Monte Carlo',     'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Monte Carlo',  'country' => 'Mónaco',         'surface' => 'Arcilla'],
+        ['needle' => 'Madrid',          'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Madrid',       'country' => 'España',         'surface' => 'Arcilla'],
+        ['needle' => 'Rome',            'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Roma',         'country' => 'Italia',         'surface' => 'Arcilla'],
+        ['needle' => 'Montreal',        'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Montreal',     'country' => 'Canadá',         'surface' => 'Dura'],
+        ['needle' => 'Cincinnati',      'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Cincinnati',   'country' => 'Estados Unidos', 'surface' => 'Dura'],
+        ['needle' => 'Shanghai',        'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'Shanghái',     'country' => 'China',          'surface' => 'Dura'],
+        ['needle' => 'Paris',           'tier' => 'ATP Masters 1000', 'tours' => ['ATP'], 'city' => 'París',        'country' => 'Francia',        'surface' => 'Dura (indoor)'],
         // WTA 1000 (10) — Miami/Madrid/Rome/Cincinnati already covered above as Masters,
         // here we add the WTA versions plus the 5 WTA-only events
-        ['needle' => 'Miami',           'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Madrid',          'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Rome',            'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Cincinnati',      'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Doha',            'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Dubai',           'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Toronto',         'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Beijing',         'tier' => 'WTA 1000',         'tours' => ['WTA']],
-        ['needle' => 'Wuhan',           'tier' => 'WTA 1000',         'tours' => ['WTA']],
+        ['needle' => 'Miami',           'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Miami',        'country' => 'Estados Unidos', 'surface' => 'Dura'],
+        ['needle' => 'Madrid',          'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Madrid',       'country' => 'España',         'surface' => 'Arcilla'],
+        ['needle' => 'Rome',            'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Roma',         'country' => 'Italia',         'surface' => 'Arcilla'],
+        ['needle' => 'Cincinnati',      'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Cincinnati',   'country' => 'Estados Unidos', 'surface' => 'Dura'],
+        ['needle' => 'Doha',            'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Doha',         'country' => 'Catar',          'surface' => 'Dura'],
+        ['needle' => 'Dubai',           'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Dubái',        'country' => 'Emiratos Árabes Unidos', 'surface' => 'Dura'],
+        ['needle' => 'Toronto',         'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Toronto',      'country' => 'Canadá',         'surface' => 'Dura'],
+        ['needle' => 'Beijing',         'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Pekín',        'country' => 'China',          'surface' => 'Dura'],
+        ['needle' => 'Wuhan',           'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Wuhan',        'country' => 'China',          'surface' => 'Dura'],
     ];
 
     // ───────────────────────────────────────────────────────────────────────────
@@ -181,6 +181,10 @@ class ApiTennisSyncService
                     'type'               => $tier,
                     'season'             => $year,
                     'is_active'          => true,
+                    // Static location/surface data per needle (api-tennis doesn't expose this).
+                    'city'               => $entry['city']    ?? null,
+                    'country'            => $entry['country'] ?? null,
+                    'surface'            => $entry['surface'] ?? null,
                 ];
 
                 if ($existing) {
