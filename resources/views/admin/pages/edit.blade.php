@@ -140,14 +140,119 @@ function pageEditor() {
                 sel.addRange(this.savedRange);
             }
         },
-        cmd(command, value = null) {
-            this.restoreCaret();
-            document.execCommand(command, false, value);
+        sync() {
             this.$refs.html.value = this.$refs.editor.innerHTML;
+        },
+        getRange() {
+            this.restoreCaret();
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount) return null;
+            const range = sel.getRangeAt(0);
+            // Only operate when the selection is actually inside the editor.
+            return this.$refs.editor.contains(range.commonAncestorContainer) ? range : null;
+        },
+        // Wrap the current selection in an inline tag (b/i/u). If nothing is
+        // selected we drop a zero-width-friendly element at the caret instead.
+        wrapInline(tag) {
+            const range = this.getRange();
+            if (!range) return;
+            const el = document.createElement(tag);
+            if (range.collapsed) {
+                el.appendChild(document.createTextNode('​'));
+                range.insertNode(el);
+                // Move caret inside the new element so the user can keep typing.
+                const r = document.createRange();
+                r.setStart(el.firstChild, 1);
+                r.collapse(true);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(r);
+            } else {
+                el.appendChild(range.extractContents());
+                range.insertNode(el);
+            }
+            this.sync();
+        },
+        // Replace the block containing the caret with a new tag (h2/h3/p).
+        formatBlock(tag) {
+            const range = this.getRange();
+            if (!range) return;
+            // Find the nearest block-level ancestor inside the editor.
+            let node = range.commonAncestorContainer;
+            if (node.nodeType === 3) node = node.parentNode;
+            const blockTags = ['P','DIV','H1','H2','H3','H4','H5','H6','LI','BLOCKQUOTE'];
+            while (node && node !== this.$refs.editor && !blockTags.includes(node.nodeName)) {
+                node = node.parentNode;
+            }
+            if (!node || node === this.$refs.editor) {
+                // No wrapping block — wrap a fresh one around the selection / caret line.
+                const el = document.createElement(tag);
+                el.appendChild(range.extractContents());
+                if (!el.textContent) el.appendChild(document.createTextNode('​'));
+                range.insertNode(el);
+            } else {
+                const el = document.createElement(tag);
+                while (node.firstChild) el.appendChild(node.firstChild);
+                node.parentNode.replaceChild(el, node);
+            }
+            this.sync();
+        },
+        insertList(ordered) {
+            const range = this.getRange();
+            if (!range) return;
+            const list = document.createElement(ordered ? 'ol' : 'ul');
+            const li = document.createElement('li');
+            if (range.collapsed) {
+                li.appendChild(document.createTextNode('​'));
+            } else {
+                li.appendChild(range.extractContents());
+            }
+            list.appendChild(li);
+            range.insertNode(list);
+            // Place caret at end of new list item.
+            const r = document.createRange();
+            r.selectNodeContents(li);
+            r.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(r);
+            this.sync();
         },
         link() {
             const url = prompt('URL del enlace (ej. https://...)');
-            if (url) this.cmd('createLink', url);
+            if (!url) return;
+            const range = this.getRange();
+            if (!range || range.collapsed) {
+                alert('Selecciona primero el texto que quieres convertir en enlace.');
+                return;
+            }
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener';
+            a.appendChild(range.extractContents());
+            range.insertNode(a);
+            this.sync();
+        },
+        clearFormat() {
+            const range = this.getRange();
+            if (!range || range.collapsed) return;
+            const text = range.toString();
+            range.deleteContents();
+            range.insertNode(document.createTextNode(text));
+            this.sync();
+        },
+        // Old API kept for the toolbar buttons — dispatches to the right handler.
+        cmd(command, value = null) {
+            switch (command) {
+                case 'bold':                return this.wrapInline('strong');
+                case 'italic':              return this.wrapInline('em');
+                case 'underline':           return this.wrapInline('u');
+                case 'formatBlock':         return this.formatBlock((value || 'p').toLowerCase());
+                case 'insertUnorderedList': return this.insertList(false);
+                case 'insertOrderedList':   return this.insertList(true);
+                case 'removeFormat':        return this.clearFormat();
+            }
         },
         pickFile() {
             // The file picker steals focus, so capture the caret first.
@@ -192,23 +297,29 @@ function pageEditor() {
             }
         },
         insertImageAtCaret(url) {
-            this.restoreCaret();
-            const img = `<img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;margin:1rem 0;">`;
-            // execCommand may fail in newer browsers; fall back to manual insertion.
-            const inserted = document.execCommand('insertHTML', false, img);
-            if (!inserted) {
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = '';
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            img.style.borderRadius = '8px';
+            img.style.margin = '1rem 0';
+
+            const range = this.getRange();
+            if (range) {
+                range.deleteContents();
+                range.insertNode(img);
+                // Move caret right after the image.
+                const r = document.createRange();
+                r.setStartAfter(img);
+                r.collapse(true);
                 const sel = window.getSelection();
-                if (sel && sel.rangeCount) {
-                    const range = sel.getRangeAt(0);
-                    range.deleteContents();
-                    const tmp = document.createElement('div');
-                    tmp.innerHTML = img;
-                    range.insertNode(tmp.firstChild);
-                } else {
-                    this.$refs.editor.insertAdjacentHTML('beforeend', img);
-                }
+                sel.removeAllRanges();
+                sel.addRange(r);
+            } else {
+                this.$refs.editor.appendChild(img);
             }
-            this.$refs.html.value = this.$refs.editor.innerHTML;
+            this.sync();
         },
     };
 }
