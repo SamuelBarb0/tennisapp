@@ -1188,7 +1188,17 @@ class ApiTennisSyncService
             }
             if (!empty($parts)) return implode(' ', $parts);
         }
-        return $fixture['event_final_result'] ?? null;
+        // Fallback to the aggregate "X - Y" string the API emits. Strip whitespace
+        // before comparing because the API uses " 0 - 0 " with surrounding spaces.
+        // "0-0" / "-" / empty all mean the match hasn't been played yet, so we
+        // return null instead of storing a literal "0-0" that the bracket card
+        // would then render as a real scoreline.
+        $final = $fixture['event_final_result'] ?? null;
+        if ($final !== null) {
+            $clean = preg_replace('/\s+/', '', $final);
+            if ($clean === '' || $clean === '-' || $clean === '0-0') return null;
+        }
+        return $final;
     }
 
     /**
