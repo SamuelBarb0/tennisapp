@@ -139,8 +139,12 @@
     </div>
 </div>
 
-<div class="bg-gradient-to-b from-[#0e1f30] via-gray-50 to-gray-100">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-2 pb-16">
+{{-- The wrapper continues the hero's dark gradient down into the page so the
+     ranking cards appear to "float" out of the header. When the list is empty,
+     skip the gradient and just use a flat light background so the empty-state
+     card doesn't sit on top of a washed-out grey band. --}}
+<div class="{{ count($tournamentRankings) > 0 ? 'bg-gradient-to-b from-[#0e1f30] via-gray-50 to-gray-100' : 'bg-gray-50' }}">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 {{ count($tournamentRankings) > 0 ? '-mt-2' : 'pt-10' }} pb-16">
 
         @if(count($tournamentRankings) > 0)
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
