@@ -429,6 +429,12 @@ class ApiTennisSyncService
             $scored = BracketPredictionController::scoreTournament($tournament);
         }
 
+        // Detect walkovers the API didn't report cleanly. If a match is still
+        // pending with score="0-0" or null while the next-round match it feeds
+        // into already has a real winner, the winner of the pending match must
+        // be whoever shows up in the next round.
+        $this->inferUnreportedWalkovers($tournament);
+
         // If the tournament has a tennisexplorer_slug we use the OFFICIAL draw
         // order scraped from tennisexplorer.com — this is the canonical source.
         // Otherwise we fall back to inferring the tree from player progression
@@ -1235,6 +1241,68 @@ class ApiTennisSyncService
         if ($s === '') return null;
         // Keep only digits before any "." (which is the tiebreak separator).
         return preg_replace('/\..*$/', '', $s);
+    }
+
+    /**
+     * Mark pending matches as walkovers when their downstream slot already has
+     * a real winner. The API sometimes emits walkovers with event_status that
+     * doesn't include the literal "Walkover" string (e.g. left blank or marked
+     * "Cancelled"), so we infer them from the bracket shape itself.
+     *
+     * For each pending match at round R, position P: the next round R+1 plays
+     * one match at position ceil(P/2), and one of its two players must equal
+     * the winner of our pending match. Whichever side that is wins by walkover.
+     */
+    private function inferUnreportedWalkovers(Tournament $tournament): void
+    {
+        $rounds = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
+
+        foreach ($rounds as $i => $round) {
+            if ($i === count($rounds) - 1) break; // final has no next round
+            $nextRound = $rounds[$i + 1];
+
+            // Pending matches in this round with score 0-0 or null AND both players present.
+            $pending = TennisMatch::where('tournament_id', $tournament->id)
+                ->where('round', $round)
+                ->where('status', 'pending')
+                ->whereNotNull('player1_id')
+                ->whereNotNull('player2_id')
+                ->where(function ($q) {
+                    $q->whereNull('score')->orWhere('score', '0-0')->orWhereRaw("REPLACE(score,' ','') = '0-0'");
+                })
+                ->get();
+
+            foreach ($pending as $m) {
+                $nextPos = (int) ceil($m->bracket_position / 2);
+                $nextMatch = TennisMatch::where('tournament_id', $tournament->id)
+                    ->where('round', $nextRound)
+                    ->where('bracket_position', $nextPos)
+                    ->first();
+
+                if (!$nextMatch) continue;
+
+                // Whichever of our two players appears in the next match is the walkover winner.
+                $players = [$m->player1_id, $m->player2_id];
+                $advancingId = null;
+                foreach ($players as $pid) {
+                    if ($pid === $nextMatch->player1_id || $pid === $nextMatch->player2_id) {
+                        $advancingId = $pid;
+                        break;
+                    }
+                }
+                if (!$advancingId) continue;
+
+                // Mark the LOSING side: wo_p1 means player1 lost; wo_p2 means player2 lost.
+                $losingSide = $advancingId === $m->player1_id ? 'wo_p2' : 'wo_p1';
+
+                $m->update([
+                    'status'      => 'finished',
+                    'status_note' => $losingSide,
+                    'winner_id'   => $advancingId,
+                    'score'       => null,
+                ]);
+            }
+        }
     }
 
     private function mapStatus(?string $apiStatus): string
