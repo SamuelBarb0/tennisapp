@@ -1,6 +1,10 @@
 @extends('layouts.app')
 @section('title', $page->title)
 
+@push('styles')
+    @include('pages._quill_styles')
+@endpush
+
 @php
     $email = trim(\App\Models\Setting::get('contact_email', ''));
     $phone = trim(\App\Models\Setting::get('contact_phone', ''));
@@ -37,7 +41,7 @@
         {{-- Editable intro (CMS content) --}}
         @if(trim(strip_tags($page->content)))
         <div class="px-8 pt-8 pb-2">
-            <div class="prose prose-sm md:prose-base max-w-none prose-headings:text-tc-primary prose-a:text-tc-primary">
+            <div class="page-content prose prose-sm md:prose-base max-w-none prose-headings:text-tc-primary prose-a:text-tc-primary">
                 {!! $page->content !!}
             </div>
         </div>

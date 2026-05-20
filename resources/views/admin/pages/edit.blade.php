@@ -8,10 +8,16 @@
     /* Make Quill's editor area match the rest of the admin forms. */
     .ql-toolbar.ql-snow,
     .ql-container.ql-snow { border-color: #e5e7eb; }
-    .ql-toolbar.ql-snow  { border-radius: 0.5rem 0.5rem 0 0; background: #f9fafb; }
+    .ql-toolbar.ql-snow  { border-radius: 0.5rem 0.5rem 0 0; background: #f9fafb; padding: 8px; }
     .ql-container.ql-snow { border-radius: 0 0 0.5rem 0.5rem; min-height: 400px; font-size: 0.95rem; }
     .ql-editor { min-height: 400px; }
     .ql-editor img { max-width: 100%; height: auto; border-radius: 8px; margin: 1rem 0; }
+    .ql-editor iframe { max-width: 100%; border-radius: 8px; margin: 1rem 0; }
+    .ql-editor blockquote { border-left: 4px solid #1e40af; padding-left: 1rem; color: #4b5563; font-style: italic; }
+    .ql-editor pre.ql-syntax { background: #1f2937; color: #f9fafb; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+    /* Group toolbar rows visually with a thin divider so the dense toolbar reads cleanly. */
+    .ql-toolbar.ql-snow .ql-formats { margin-right: 12px; padding-right: 8px; border-right: 1px solid #e5e7eb; }
+    .ql-toolbar.ql-snow .ql-formats:last-child { border-right: 0; }
 </style>
 @endpush
 
@@ -95,10 +101,20 @@
         modules: {
             toolbar: {
                 container: [
-                    [{ header: [2, 3, false] }],
-                    ['bold', 'italic', 'underline'],
-                    [{ list: 'ordered' }, { list: 'bullet' }],
-                    ['link', 'image'],
+                    // Row 1 — block structure & typography
+                    [{ header: [1, 2, 3, 4, false] }],
+                    [{ font: [] }, { size: ['small', false, 'large', 'huge'] }],
+                    // Row 2 — inline formatting
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ color: [] }, { background: [] }],
+                    [{ script: 'sub' }, { script: 'super' }],
+                    // Row 3 — blocks & alignment
+                    ['blockquote', 'code-block'],
+                    [{ list: 'ordered' }, { list: 'bullet' }, { list: 'check' }],
+                    [{ indent: '-1' }, { indent: '+1' }],
+                    [{ align: [] }, { direction: 'rtl' }],
+                    // Row 4 — embeds & utilities
+                    ['link', 'image', 'video'],
                     ['clean'],
                 ],
                 handlers: {
