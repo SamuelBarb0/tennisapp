@@ -212,13 +212,20 @@ class TournamentController extends Controller
             ->take(20)
             ->get();
 
-        // Determine if predictions are locked
+        // Determine if predictions are locked. Finished tournaments are ALWAYS locked
+        // regardless of what individual match scheduled_at values say — otherwise a
+        // bad `scheduled_at` (e.g. NULL or a future-looking value left by a sync glitch)
+        // can make a long-past tournament look like it's still open.
         $firstMatch = $tournament->matches()
             ->whereNotIn('status', ['cancelled'])
+            ->whereNotNull('scheduled_at')
             ->orderBy('scheduled_at')
             ->first();
-        $predictionsLocked = !$firstMatch || now()->gte($firstMatch->scheduled_at);
-        $lockDate = $firstMatch?->scheduled_at;
+        $isFinished       = $tournament->status === 'finished';
+        $predictionsLocked = $isFinished
+            || !$firstMatch
+            || now()->gte($firstMatch->scheduled_at);
+        $lockDate = $isFinished ? null : $firstMatch?->scheduled_at;
 
         // Bracket predictions for the viewing user (self or another user's, if requested)
         $userBracketPicks = collect();
