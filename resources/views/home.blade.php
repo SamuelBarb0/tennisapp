@@ -23,62 +23,92 @@
     <div class="relative">
         <div class="relative overflow-hidden" style="min-height: 480px;">
 
-            {{-- ★ Slide 0: Hero default "Predice. Compite. Gana." ★ --}}
+            {{-- ★ Slide 0: Hero — admin-editable banner OR default "Predice. Compite. Gana." ★ --}}
             <div x-show="current === 0"
                  x-transition:enter="transition ease-out duration-500"
                  x-transition:enter-start="opacity-0"
                  x-transition:enter-end="opacity-100"
-                 class="absolute inset-0 bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark overflow-hidden">
-                {{-- Orbes decorativos --}}
-                <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
-                <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
+                 class="absolute inset-0 overflow-hidden {{ $heroBanner ? '' : 'bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark' }}">
 
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20 relative">
-                    <div class="text-center fade-in">
-                        <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
-                            Predice. Compite. <span class="text-tc-accent">Gana.</span>
-                        </h1>
-                        <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
-                            Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.
-                        </p>
-                        <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                            @guest
-                                <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
-                                    Comenzar gratis
-                                </a>
-                                <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
-                                    Ver torneos
-                                </a>
-                            @else
-                                <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
-                                    Hacer pronósticos
-                                </a>
-                                <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
-                                    ¿Cómo funciona?
-                                </a>
-                            @endguest
-                        </div>
-                        {{-- Stats --}}
-                        <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto">
-                            <div class="text-center">
-                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['tournaments'] }}</div>
-                                <div class="text-xs text-blue-200 mt-1">Torneos</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['players'] }}</div>
-                                <div class="text-xs text-blue-200 mt-1">Jugadores</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['total_points'] }}</div>
-                                <div class="text-xs text-blue-200 mt-1">Puntos repartidos</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['users'] }}</div>
-                                <div class="text-xs text-blue-200 mt-1">Participantes</div>
+                @if($heroBanner)
+                    {{-- Admin-managed hero: image or video background with optional title/subtitle overlay --}}
+                    @php $heroSrc = $heroBanner->media_src; @endphp
+                    @if($heroBanner->link)<a href="{{ $heroBanner->link }}" class="block h-full w-full">@endif
+                    @if($heroBanner->media_type === 'video' && $heroSrc)
+                        <video src="{{ $heroSrc }}" autoplay muted loop playsinline class="absolute inset-0 w-full h-full object-cover"></video>
+                    @elseif($heroSrc)
+                        <img src="{{ $heroSrc }}" alt="{{ $heroBanner->title }}" class="absolute inset-0 w-full h-full object-cover">
+                    @else
+                        <div class="absolute inset-0 bg-gradient-to-br from-tc-primary via-tc-primary-hover to-tc-primary-dark"></div>
+                    @endif
+                    @if($heroBanner->title || $heroBanner->subtitle)
+                    <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-transparent flex items-center">
+                        <div class="max-w-7xl mx-auto px-6 sm:px-12 md:px-20 w-full">
+                            <div class="max-w-2xl">
+                                @if($heroBanner->title)
+                                    <h1 class="text-4xl md:text-6xl font-black text-white tracking-tight mb-4 drop-shadow-lg">{{ $heroBanner->title }}</h1>
+                                @endif
+                                @if($heroBanner->subtitle)
+                                    <p class="text-lg md:text-xl text-white/90 drop-shadow max-w-xl">{{ $heroBanner->subtitle }}</p>
+                                @endif
                             </div>
                         </div>
                     </div>
-                </div>
+                    @endif
+                    @if($heroBanner->link)</a>@endif
+                @else
+                    {{-- Default hero (shown when no banner has is_hero=true) --}}
+                    {{-- Orbes decorativos --}}
+                    <div class="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl float-y-slow pointer-events-none"></div>
+                    <div class="absolute bottom-0 right-10 w-96 h-96 bg-white/10 rounded-full blur-3xl float-y pointer-events-none" style="animation-delay:1.5s"></div>
+
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 md:py-20 relative">
+                        <div class="text-center fade-in">
+                            <h1 class="text-4xl md:text-6xl font-bold text-white tracking-tight mb-6">
+                                Predice. Compite. <span class="text-tc-accent">Gana.</span>
+                            </h1>
+                            <p class="text-lg md:text-xl text-blue-100 max-w-2xl mx-auto mb-10">
+                                Haz tus pronósticos en los mejores torneos de tenis del mundo y gana premios increíbles.
+                            </p>
+                            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                                @guest
+                                    <a href="{{ route('register') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
+                                        Comenzar gratis
+                                    </a>
+                                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
+                                        Ver torneos
+                                    </a>
+                                @else
+                                    <a href="{{ route('tournaments.index') }}" class="px-8 py-3.5 bg-tc-accent text-tc-primary-dark rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 active:scale-95">
+                                        Hacer pronósticos
+                                    </a>
+                                    <a href="{{ route('rules') }}" class="px-8 py-3.5 bg-white/10 text-white border border-white/30 rounded-full text-base font-semibold hover:bg-white/20 transition-all backdrop-blur hover:-translate-y-1">
+                                        ¿Cómo funciona?
+                                    </a>
+                                @endguest
+                            </div>
+                            {{-- Stats --}}
+                            <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 max-w-3xl mx-auto">
+                                <div class="text-center">
+                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['tournaments'] }}</div>
+                                    <div class="text-xs text-blue-200 mt-1">Torneos</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['players'] }}</div>
+                                    <div class="text-xs text-blue-200 mt-1">Jugadores</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['total_points'] }}</div>
+                                    <div class="text-xs text-blue-200 mt-1">Puntos repartidos</div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-2xl md:text-3xl font-bold text-white">{{ $stats['users'] }}</div>
+                                    <div class="text-xs text-blue-200 mt-1">Participantes</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
             </div>
 
             {{-- ★ Slides 1+: Admin banners ★ --}}

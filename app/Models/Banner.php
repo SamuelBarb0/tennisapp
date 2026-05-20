@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Banner extends Model
 {
     protected $fillable = [
-        'title', 'subtitle', 'image', 'media_type', 'media_url', 'link', 'is_active', 'order',
+        'title', 'subtitle', 'image', 'media_type', 'media_url', 'link', 'is_active', 'is_hero', 'order',
     ];
 
     public function getMediaSrcAttribute(): ?string
@@ -21,6 +21,7 @@ class Banner extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_hero'   => 'boolean',
         ];
     }
 

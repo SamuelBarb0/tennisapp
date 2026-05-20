@@ -26,12 +26,18 @@ class BannerController extends Controller
             'subtitle' => 'nullable|string',
             'link' => 'nullable|string',
             'is_active' => 'boolean',
+            'is_hero' => 'boolean',
             'order' => 'integer',
             'media_type' => 'required|in:image,video',
             'media_url' => 'nullable|url',
             'image' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,mp4,webm|max:20480',
         ]);
         $data['is_active'] = $request->boolean('is_active');
+        $data['is_hero']   = $request->boolean('is_hero');
+        // Only one hero at a time — clear any prior hero before saving this one.
+        if ($data['is_hero']) {
+            Banner::where('is_hero', true)->update(['is_hero' => false]);
+        }
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('banners', 'public');
         }
@@ -51,12 +57,18 @@ class BannerController extends Controller
             'subtitle' => 'nullable|string',
             'link' => 'nullable|string',
             'is_active' => 'boolean',
+            'is_hero' => 'boolean',
             'order' => 'integer',
             'media_type' => 'required|in:image,video',
             'media_url' => 'nullable|url',
             'image' => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,mp4,webm|max:20480',
         ]);
         $data['is_active'] = $request->boolean('is_active');
+        $data['is_hero']   = $request->boolean('is_hero');
+        // Only one hero at a time — clear any prior hero before saving this one.
+        if ($data['is_hero']) {
+            Banner::where('is_hero', true)->where('id', '!=', $banner->id)->update(['is_hero' => false]);
+        }
         if ($request->hasFile('image')) {
             $data['image'] = $request->file('image')->store('banners', 'public');
         }

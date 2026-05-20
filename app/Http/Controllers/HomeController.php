@@ -14,8 +14,10 @@ class HomeController extends Controller
 {
     public function index()
     {
-        // Limit to 3 active banners (carousel cap)
-        $banners = Banner::active()->take(3)->get();
+        // The "hero" banner (if any) replaces the hardcoded slide 0 in the home
+        // carousel. The remaining active banners follow it as slides 1..N.
+        $heroBanner = Banner::where('is_active', true)->where('is_hero', true)->first();
+        $banners = Banner::active()->where('is_hero', false)->take(3)->get();
 
         // "Próximos torneos a predecir": the admin opts in via featured_on_home.
         // We exclude finished tournaments so completed events (e.g. Madrid
@@ -127,7 +129,7 @@ class HomeController extends Controller
         ];
 
         return view('home', compact(
-            'banners', 'featuredTournaments', 'nextTournament', 'upcomingTournaments',
+            'banners', 'heroBanner', 'featuredTournaments', 'nextTournament', 'upcomingTournaments',
             'liveTournament', 'recentResults', 'tournamentRankings', 'stats'
         ));
     }

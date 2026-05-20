@@ -51,10 +51,17 @@
             <p class="text-[11px] text-gray-400 mt-1">Si se llena, se usa esta URL en lugar del archivo subido.</p>
             @error('media_url') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
         </div>
-        <div>
+        <div class="space-y-2">
             <label class="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" name="is_active" value="1" {{ old('is_active', true) ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary">
                 <span class="text-sm">Activo</span>
+            </label>
+            <label class="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" name="is_hero" value="1" {{ old('is_hero') ? 'checked' : '' }} class="w-4 h-4 rounded border-gray-300 text-tc-primary focus:ring-tc-primary mt-0.5">
+                <span class="text-sm">
+                    <span class="font-medium">Banner principal (Hero)</span>
+                    <span class="block text-[11px] text-gray-500">Reemplaza el slide inicial "Predice. Compite. Gana." del home. Solo un banner puede ser el hero a la vez.</span>
+                </span>
             </label>
         </div>
         <div class="flex items-center gap-3 pt-2">

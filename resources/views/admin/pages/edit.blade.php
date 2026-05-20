@@ -38,8 +38,10 @@
         <div class="p-5 border-b border-gray-100">
             <label class="block text-sm font-semibold text-gray-700 mb-3">Contenido</label>
 
-            {{-- Toolbar --}}
-            <div class="flex flex-wrap gap-1 mb-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+            {{-- Toolbar — every button blocks `mousedown` so the editor keeps focus
+                 and `document.execCommand` operates on the current selection. --}}
+            <div class="flex flex-wrap gap-1 mb-2 bg-gray-50 p-2 rounded-lg border border-gray-200"
+                 @mousedown.prevent>
                 <button type="button" @click="cmd('bold')" title="Negrita"
                         class="px-3 py-1.5 text-sm font-bold rounded hover:bg-gray-200">B</button>
                 <button type="button" @click="cmd('italic')" title="Cursiva"
@@ -62,7 +64,7 @@
                 <button type="button" @click="link()" title="Enlace"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200">🔗 Link</button>
                 <span class="w-px bg-gray-300 mx-1"></span>
-                <button type="button" @click="$refs.fileInput.click()" title="Subir imagen desde mi computador"
+                <button type="button" @click="pickFile()" title="Subir imagen desde mi computador"
                         class="px-3 py-1.5 text-sm rounded hover:bg-gray-200" :disabled="uploading"
                         :class="uploading ? 'opacity-50 cursor-wait' : ''">
                     <span x-show="!uploading">📷 Subir imagen</span>
@@ -118,23 +120,40 @@ function pageEditor() {
         init() {
             // Sync textarea on load
             this.$refs.html.value = this.$refs.editor.innerHTML;
-            // Remember the last caret position inside the editor so images can be
-            // inserted at that point even after focus moves to a file picker / prompt.
-            this.$refs.editor.addEventListener('blur', () => {
+            // Track caret position continuously while user types/clicks in the editor.
+            // We save it on every selection change because focus moves the moment a
+            // toolbar button or file picker activates.
+            const save = () => {
                 const sel = window.getSelection();
                 if (sel && sel.rangeCount && this.$refs.editor.contains(sel.anchorNode)) {
                     this.savedRange = sel.getRangeAt(0).cloneRange();
                 }
-            });
+            };
+            this.$refs.editor.addEventListener('keyup', save);
+            this.$refs.editor.addEventListener('mouseup', save);
+            this.$refs.editor.addEventListener('focus', save);
+        },
+        restoreCaret() {
+            this.$refs.editor.focus();
+            if (this.savedRange) {
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(this.savedRange);
+            }
         },
         cmd(command, value = null) {
-            this.$refs.editor.focus();
+            this.restoreCaret();
             document.execCommand(command, false, value);
             this.$refs.html.value = this.$refs.editor.innerHTML;
         },
         link() {
             const url = prompt('URL del enlace (ej. https://...)');
             if (url) this.cmd('createLink', url);
+        },
+        pickFile() {
+            // The file picker steals focus, so capture the caret first.
+            this.restoreCaret();
+            this.$refs.fileInput.click();
         },
         imageUrl() {
             const url = prompt('URL de la imagen (https://...)');
@@ -160,28 +179,36 @@ function pageEditor() {
                     body: fd,
                 });
                 if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    throw new Error(err.message || 'No se pudo subir la imagen.');
+                    const errText = await res.text();
+                    console.error('Upload failed:', res.status, errText);
+                    throw new Error('No se pudo subir la imagen (HTTP ' + res.status + '). Revisa la consola.');
                 }
                 const data = await res.json();
                 this.insertImageAtCaret(data.url);
             } catch (err) {
+                console.error(err);
                 alert(err.message || 'Error al subir la imagen.');
             } finally {
                 this.uploading = false;
             }
         },
         insertImageAtCaret(url) {
-            this.$refs.editor.focus();
-            // Restore previously saved caret position so the image lands where the
-            // user was typing, not at the start of the editor.
-            if (this.savedRange) {
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(this.savedRange);
-            }
+            this.restoreCaret();
             const img = `<img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;margin:1rem 0;">`;
-            document.execCommand('insertHTML', false, img);
+            // execCommand may fail in newer browsers; fall back to manual insertion.
+            const inserted = document.execCommand('insertHTML', false, img);
+            if (!inserted) {
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount) {
+                    const range = sel.getRangeAt(0);
+                    range.deleteContents();
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = img;
+                    range.insertNode(tmp.firstChild);
+                } else {
+                    this.$refs.editor.insertAdjacentHTML('beforeend', img);
+                }
+            }
             this.$refs.html.value = this.$refs.editor.innerHTML;
         },
     };
