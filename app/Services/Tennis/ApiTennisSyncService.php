@@ -313,7 +313,15 @@ class ApiTennisSyncService
             return !$isQualy && trim((string) ($f['tournament_round'] ?? '')) !== '';
         });
 
-        if (empty($mainDrawFixtures) && !$tournament->matches()->where('round', 'R128')->exists()) {
+        // Run the bootstrap when api-tennis hasn't published main-draw fixtures
+        // AND the tournament has no first-round matches yet. We check any of
+        // the possible starting rounds (R128 / R64 / R32 / R16) so a partially-
+        // populated tournament re-runs the bootstrap correctly.
+        $hasAnyFirstRound = $tournament->matches()
+            ->whereIn('round', ['R128', 'R64', 'R32', 'R16'])
+            ->exists();
+
+        if (empty($mainDrawFixtures) && !$hasAnyFirstRound) {
             $bootstrapped = $this->bootstrapFromBracketTennis($tournament);
             if ($bootstrapped > 0) {
                 return [
