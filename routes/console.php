@@ -75,7 +75,11 @@ Schedule::command('tennis:discover-tournaments')
 // no-op most of the year. Dropped from daily to twice-weekly because there's
 // rarely new work for it.
 Schedule::command('tennis:fill-tournament-dates')
-    ->twiceWeekly(1, 4, '04:30')  // 1=Mon, 4=Thu
+    ->weeklyOn(1, '04:30')   // Lunes
+    ->timezone('America/Bogota')
+    ->onOneServer();
+Schedule::command('tennis:fill-tournament-dates')
+    ->weeklyOn(4, '04:30')   // Jueves
     ->timezone('America/Bogota')
     ->onOneServer();
 
