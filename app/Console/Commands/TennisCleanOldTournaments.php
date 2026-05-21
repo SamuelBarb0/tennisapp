@@ -70,24 +70,41 @@ class TennisCleanOldTournaments extends Command
         return self::SUCCESS;
     }
 
-    // ─── Pass 1: phantom 0-0 scores ─────────────────────────────────────────
+    // ─── Pass 1: phantom 0-0 scores + scores attached to walkover matches ───
+    // Two scenarios get cleaned here:
+    //   a) status != finished but score = "0-0" → API placeholder, no real play
+    //   b) status_note = wo_p1/wo_p2 (walkover) but score still has set numbers →
+    //      the walkover should always display *just* "(wo)" with no scoreline
     private function cleanPhantomScores(Tournament $t, bool $dryRun): int
     {
-        $rows = TennisMatch::where('tournament_id', $t->id)
+        $cleaned = 0;
+
+        // Case (a): phantom 0-0
+        $phantom = TennisMatch::where('tournament_id', $t->id)
             ->where('status', '!=', 'finished')
             ->where(function ($q) {
                 $q->where('score', '0-0')
                   ->orWhereRaw("REPLACE(score,' ','') = '0-0'");
             })
             ->get();
-
-        if ($rows->isEmpty()) return 0;
-
-        $this->line("  · phantom 0-0 scores: {$rows->count()}");
-        if (!$dryRun) {
-            TennisMatch::whereIn('id', $rows->pluck('id'))->update(['score' => null]);
+        if ($phantom->isNotEmpty()) {
+            $this->line("  · phantom 0-0 scores: {$phantom->count()}");
+            if (!$dryRun) TennisMatch::whereIn('id', $phantom->pluck('id'))->update(['score' => null]);
+            $cleaned += $phantom->count();
         }
-        return $rows->count();
+
+        // Case (b): scores left over on walkover matches
+        $woWithScore = TennisMatch::where('tournament_id', $t->id)
+            ->whereIn('status_note', ['wo_p1', 'wo_p2'])
+            ->whereNotNull('score')
+            ->get();
+        if ($woWithScore->isNotEmpty()) {
+            $this->line("  · walkover matches with leftover score: {$woWithScore->count()}");
+            if (!$dryRun) TennisMatch::whereIn('id', $woWithScore->pluck('id'))->update(['score' => null]);
+            $cleaned += $woWithScore->count();
+        }
+
+        return $cleaned;
     }
 
     // ─── Pass 2: infer unreported walkovers ─────────────────────────────────

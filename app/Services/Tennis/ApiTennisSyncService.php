@@ -1103,8 +1103,28 @@ class ApiTennisSyncService
         $draw = $this->scraper->draw($btSlug, $btTour);
         if (empty($draw)) return 0;
 
+        // Detect the bracket size from how many entries the scraper returned.
+        // bracket.tennis emits one entry per first-round MATCH (not per player),
+        // so:
+        //   64 entries → R128 (full Grand Slam draw of 128 players)
+        //   32 entries → R64  (56-draw tournament like Dubai/Qatar/Monte-Carlo,
+        //                      with 8 BYEs taking the top seeds straight to R32)
+        //   16 entries → R32  (ATP 500 tournaments)
+        //    8 entries → R16  (small fields)
+        // This used to hardcode 'R128' which left e.g. Dubai with 32 matches in
+        // R128 while api-tennis put the real fixtures in R64 — the two never
+        // matched up and the bracket rendered scrambled.
+        $entryCount = count($draw);
+        $startRound = match (true) {
+            $entryCount > 32 => 'R128',
+            $entryCount > 16 => 'R64',
+            $entryCount > 8  => 'R32',
+            $entryCount > 4  => 'R16',
+            default          => 'QF',
+        };
+
         // Skip if matches already exist (idempotency)
-        if ($tournament->matches()->where('round', 'R128')->exists()) return 0;
+        if ($tournament->matches()->where('round', $startRound)->exists()) return 0;
 
         $tbd = Player::where('name', 'TBD')->first();
         if (!$tbd) return 0;
@@ -1122,11 +1142,11 @@ class ApiTennisSyncService
                 'player2_id'       => $p2->id,
                 'player1_seed'     => $entry['p1_seed'] ?? null,
                 'player2_seed'     => $entry['p2_seed'] ?? null,
-                'round'            => 'R128',
+                'round'            => $startRound,
                 'bracket_position' => $entry['slot'] + 1, // 1-indexed
                 'status'           => 'pending',
                 'scheduled_at'     => $tournament->start_date ?? now()->addDays(7),
-                'api_event_key'    => 'bt-bootstrap-r128-' . $entry['slot'] . '-' . $tournament->id,
+                'api_event_key'    => 'bt-bootstrap-' . strtolower($startRound) . '-' . $entry['slot'] . '-' . $tournament->id,
             ]);
             $created++;
         }
