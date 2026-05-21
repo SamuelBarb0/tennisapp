@@ -20,13 +20,14 @@ Schedule::call(function () {
 // ─────────────────────────────────────────────────────────────────────────────
 // Matchstat (Tennis API ATP/WTA/ITF) — fully automated sync
 // ─────────────────────────────────────────────────────────────────────────────
-// Live scores: poll every 15 minutes during typical match hours (UTC).
-// 10:00–23:59 UTC covers most ATP/WTA prime time across timezones.
-// Cadence is 15 min (not 2 min) because Hostinger shared plans only allow
-// the system cron to fire every 15 minutes — anything more frequent is moot.
+// Live scores: poll every 15 minutes, 24h a day. We can't predict when
+// bracket.tennis publishes a new draw or when api-tennis flips a tournament
+// from "Not started" to live, and those events drive the email blasts, so
+// missing them by 10h (the old 10:00–23:59 UTC window) was painful for events
+// drawn early morning. Cadence is 15 min — Hostinger shared plans allow no
+// finer than that, so anything more frequent is moot.
 Schedule::command('tennis:sync-live --all')
     ->everyFifteenMinutes()
-    ->between('10:00', '23:59')
     ->withoutOverlapping(10) // bail if a previous run is still going
     ->onOneServer()
     ->runInBackground();

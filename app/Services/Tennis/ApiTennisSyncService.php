@@ -301,24 +301,32 @@ class ApiTennisSyncService
             }
         }
 
-        // If api-tennis hasn't published fixtures yet but bracket.tennis already
-        // has the draw, bootstrap the bracket from BT alone so users can start
-        // predicting ~5-7 days earlier. The api-tennis scores/winners will
-        // overlay later when fixtures appear.
-        if (empty($allFixtures)) {
+        // If api-tennis hasn't published main-draw fixtures yet but bracket.tennis
+        // already has the draw, bootstrap from BT alone so users can start
+        // predicting ~5-7 days early. The api-tennis scores/winners will overlay
+        // once fixtures appear. We check "main draw" specifically — not just
+        // "any fixtures" — because Grand Slams publish qualifying days before
+        // the main draw, and an empty()-only guard kept us stuck on qualy.
+        $mainDrawFixtures = array_filter($allFixtures, function ($f) {
+            $isQualy = ($f['event_qualification'] ?? null) === 'True'
+                || ($f['event_qualification'] ?? null) === true;
+            return !$isQualy && trim((string) ($f['tournament_round'] ?? '')) !== '';
+        });
+
+        if (empty($mainDrawFixtures) && !$tournament->matches()->where('round', 'R128')->exists()) {
             $bootstrapped = $this->bootstrapFromBracketTennis($tournament);
             if ($bootstrapped > 0) {
                 return [
-                    'fixtures'       => 0,
+                    'fixtures'       => count($allFixtures),
                     'main_draw'      => 0,
-                    'qualy'          => 0,
+                    'qualy'          => count($allFixtures), // everything we got was qualy
                     'finished'       => 0,
                     'scored'         => 0,
                     'placeholders'   => 0,
                     'bootstrapped'   => $bootstrapped,
                 ];
             }
-            return ['fixtures' => 0, 'updated' => 0, 'scored' => 0];
+            return ['fixtures' => count($allFixtures), 'updated' => 0, 'scored' => 0];
         }
 
         // Wrap into the shape the rest of the loop expects.

@@ -27,7 +27,8 @@ use Illuminate\Support\Facades\Log;
  */
 class BracketTennisScraper
 {
-    public const TTL_DRAW = 3600; // 1h — draws don't change during a tournament
+    public const TTL_DRAW       = 3600; // 1h — draws don't change once published
+    public const TTL_DRAW_EMPTY = 300;  // 5min — keep retrying when the draw is still pending
 
     private const URL_TEMPLATE = 'https://bracket.tennis/tournaments/{slug}/{tour}';
 
@@ -50,34 +51,49 @@ class BracketTennisScraper
         }, cacheSuffix: 'dates');
     }
 
-    /** Shared HTTP/cache wrapper for both draw() and dates(). */
+    /**
+     * Shared HTTP/cache wrapper. We split cache TTL into "got data" (1h) vs
+     * "empty result" (5min) so a missed publish window doesn't lock us into
+     * an empty cache for a whole hour — that was exactly the Roland Garros
+     * incident where the draw published but our app kept returning [] for an
+     * hour after the publish.
+     */
     private function fetchAndParse(string $slug, string $tour, callable $parser, string $cacheSuffix = 'draw'): array
     {
         $slug = trim($slug, '/');
         $tour = strtolower($tour);
         $cacheKey = 'bt-' . $cacheSuffix . ':' . md5($slug . '|' . $tour);
+        $cache = Cache::store('file');
 
-        return Cache::store('file')->remember($cacheKey, self::TTL_DRAW, function () use ($slug, $tour, $parser) {
-            $url = strtr(self::URL_TEMPLATE, ['{slug}' => $slug, '{tour}' => $tour]);
-            try {
-                $resp = Http::withHeaders([
-                        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
-                        'Accept'     => 'text/html',
-                    ])
-                    ->timeout(20)
-                    ->get($url);
-            } catch (\Throwable $e) {
-                Log::error('bracket.tennis fetch failed', ['slug' => $slug, 'tour' => $tour, 'error' => $e->getMessage()]);
-                return [];
-            }
+        $hit = $cache->get($cacheKey);
+        if ($hit !== null) return $hit;
 
-            if (!$resp->successful()) {
-                Log::warning('bracket.tennis non-2xx', ['slug' => $slug, 'tour' => $tour, 'code' => $resp->status()]);
-                return [];
-            }
+        $url = strtr(self::URL_TEMPLATE, ['{slug}' => $slug, '{tour}' => $tour]);
+        try {
+            $resp = Http::withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
+                    'Accept'     => 'text/html',
+                ])
+                ->timeout(20)
+                ->get($url);
+        } catch (\Throwable $e) {
+            Log::error('bracket.tennis fetch failed', ['slug' => $slug, 'tour' => $tour, 'error' => $e->getMessage()]);
+            $cache->put($cacheKey, [], self::TTL_DRAW_EMPTY);
+            return [];
+        }
 
-            return $parser($resp->body());
-        });
+        if (!$resp->successful()) {
+            Log::warning('bracket.tennis non-2xx', ['slug' => $slug, 'tour' => $tour, 'code' => $resp->status()]);
+            $cache->put($cacheKey, [], self::TTL_DRAW_EMPTY);
+            return [];
+        }
+
+        $parsed = $parser($resp->body());
+        // Empty parse result usually means "draw not published yet" — keep
+        // retrying every few minutes instead of waiting an hour.
+        $ttl = empty($parsed) ? self::TTL_DRAW_EMPTY : self::TTL_DRAW;
+        $cache->put($cacheKey, $parsed, $ttl);
+        return $parsed;
     }
 
     /**
