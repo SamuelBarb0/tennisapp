@@ -596,15 +596,23 @@ class ApiTennisSyncService
         // 1) Build surname → R128 slot map from the scraped draw.
         //    Also keep surname → seed/Q/WC tag AND surname → country (ISO-3)
         //    so we can patch missing flags from bracket.tennis as fallback.
+        //
+        //    `$surnamesInDraw` tracks every player the scraper showed (with or
+        //    without seed) so we can CLEAR stale seeds on players who used to
+        //    have one in a previous tournament but are unseeded in this draw.
+        //    Without this, a player who once had seed='1' would keep it forever
+        //    because the seed-update loop below was additive only.
         $surnameToFirstSlot = [];
         $surnameToSeed = [];
         $surnameToCountry = [];
+        $surnamesInDraw = [];
         foreach ($draw as $entry) {
             foreach (['p1', 'p2'] as $side) {
                 $name = $entry[$side];
                 if (!$name || strcasecmp($name, 'Bye') === 0) continue;
                 $key = BracketTennisScraper::surnameKey($name);
                 if ($key === '') continue;
+                $surnamesInDraw[$key] = true;
                 if (!isset($surnameToFirstSlot[$key])) {
                     $expandedPos = ($entry['slot'] * 2) + ($side === 'p2' ? 1 : 0);
                     $surnameToFirstSlot[$key] = $expandedPos;
@@ -634,9 +642,19 @@ class ApiTennisSyncService
                 $p = $m->{$rel};
                 if (!$p || $p->name === 'TBD') continue;
                 $sk = BracketTennisScraper::surnameKey($p->name);
-                if (isset($surnameToSeed[$sk]) && $m->$col !== $surnameToSeed[$sk]) {
-                    $updates[$col] = $surnameToSeed[$sk];
+
+                if (isset($surnameToSeed[$sk])) {
+                    // Scraper says this player has a seed (number/Q/WC/etc.)
+                    if ($m->$col !== $surnameToSeed[$sk]) {
+                        $updates[$col] = $surnameToSeed[$sk];
+                    }
+                } elseif (isset($surnamesInDraw[$sk]) && $m->$col !== null) {
+                    // Scraper showed the player but DIDN'T mark them as a seed.
+                    // Clear any stale seed inherited from a previous tournament
+                    // (this is what fixed the "Y. Wu shown as seed=1" case).
+                    $updates[$col] = null;
                 }
+
                 // Backfill country from BT if missing or "Unknown"
                 if (isset($surnameToCountry[$sk]) && (!$p->nationality_code || $p->country === 'Unknown' || $p->iso2 === 'un')) {
                     $iso3 = strtoupper($surnameToCountry[$sk]);
