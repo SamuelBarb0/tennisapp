@@ -79,8 +79,15 @@ class HomeController extends Controller
         // Backwards-compat for sections still expecting nextTournament
         $nextTournament = $featuredTournaments->first();
 
-        // Próximos torneos (con partidos, excluyendo los destacados Y los terminados)
-        $featuredIds = $featuredTournaments->pluck('id')->all();
+        // Próximos torneos (con partidos, excluyendo los destacados Y los terminados).
+        // groupByFamily() collapses ATP+WTA siblings into one card but only the
+        // primary's id ends up in ->pluck('id'). We pull the sibling IDs from
+        // `family_ids` (set by groupByFamily) so the other half of a family
+        // doesn't reappear as its own card below.
+        $featuredIds = $featuredTournaments
+            ->flatMap(fn($t) => $t->family_ids ?? [$t->id])
+            ->unique()
+            ->all();
         $upcomingTournaments = Tournament::where('is_active', true)
             ->where('status', '!=', 'finished')
             ->where('start_date', '>=', '2026-01-01')

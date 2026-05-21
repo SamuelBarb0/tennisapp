@@ -245,11 +245,12 @@
             'orb1'    => 'radial-gradient(ellipse at 15% 50%, rgba(192,86,218,0.22) 0%, transparent 60%)',
             'orb2'    => 'radial-gradient(ellipse at 88% 15%, rgba(255,150,220,0.08) 0%, transparent 50%)',
             'accent'  => '#e879f9',
-            // Hero stays purple; the "WTA" chip matches the brand pink chips used
-            // across the rest of the site (Tailwind bg-pink-100 / text-pink-700).
-            'tag_bg'     => '#fce7f3', // pink-100
-            'tag_border' => '#f9a8d4', // pink-300
-            'tag_text'   => '#be185d', // pink-700
+            // Chip in a translucent violet so it harmonizes with the purple hero
+            // background instead of fighting it with the pink-100/pink-700 combo
+            // used in the rest of the site (which is meant for light backgrounds).
+            'tag_bg'     => 'rgba(192,86,218,0.18)',
+            'tag_border' => 'rgba(232,121,249,0.4)',
+            'tag_text'   => '#f0abfc',
             'label'   => $type,
             'label_icon' => '<path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/>',
         ],
