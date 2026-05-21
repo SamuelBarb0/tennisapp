@@ -850,8 +850,6 @@
                                             @else
                                                 {{ $match->player1_seed }}
                                             @endif
-                                        @elseif($match->player1->ranking)
-                                            <span class="text-[7px] font-normal text-gray-400">{{ $match->player1->ranking }}</span>
                                         @endif
                                     </span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
@@ -951,9 +949,6 @@
                                             @else
                                                 {{ $match->player1_seed }}
                                             @endif
-                                        @elseif($match->player1->ranking)
-                                            {{-- Fallback: mostrar ranking ATP/WTA mundial cuando no hay seed del torneo --}}
-                                            <span class="text-[7px] font-normal text-gray-400">{{ $match->player1->ranking }}</span>
                                         @endif
                                     </span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
@@ -1016,8 +1011,6 @@
                                             @else
                                                 {{ $match->player2_seed }}
                                             @endif
-                                        @elseif($match->player2->ranking)
-                                            <span class="text-[7px] font-normal text-gray-400">{{ $match->player2->ranking }}</span>
                                         @endif
                                     </span>
                                     <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
