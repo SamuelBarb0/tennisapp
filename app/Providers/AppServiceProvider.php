@@ -21,6 +21,16 @@ class AppServiceProvider extends ServiceProvider
         // in Spanish. Without this the locale stays at "en" even though APP_LOCALE=es.
         Carbon::setLocale(config('app.locale', 'es'));
 
+        // App-wide timezone stays UTC so all timestamps are stored canonically.
+        // Use `->bogota()` in views to convert just for display, e.g.:
+        //   {{ $match->scheduled_at->bogota()->format('d M, H:i') }}
+        // We don't want to flip APP_TIMEZONE because that would silently shift
+        // every legacy timestamp by 5 hours.
+        Carbon::macro('bogota', function () {
+            /** @var \Carbon\Carbon $this */
+            return $this->copy()->setTimezone('America/Bogota');
+        });
+
         // Use our branded Tennis Challenge mail layout (resources/views/emails/auth/*)
         // for the password-reset and email-verification notifications, instead of
         // Laravel's default "Hello! Regards" template that ships with the framework.

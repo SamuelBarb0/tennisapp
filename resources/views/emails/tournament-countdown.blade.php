@@ -21,7 +21,7 @@
     </div>
 
     <p style="margin:0 0 16px 0;">
-        Cierra el {{ $closesAt->format('d M Y') }} a las {{ $closesAt->format('H:i') }}.
+        Cierra el {{ $closesAt->bogota()->format('d M Y') }} a las {{ $closesAt->bogota()->format('H:i') }} (hora Colombia).
     </p>
 
     <x-mail-button :url="route('tournaments.show', $tournament)">Hacer mi predicción</x-mail-button>

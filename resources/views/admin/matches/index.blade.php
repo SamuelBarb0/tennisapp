@@ -53,7 +53,7 @@
                         <div class="text-xs text-gray-400">vs {{ $match->player2->name ?? 'TBD' }}</div>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">{{ $match->round }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $match->scheduled_at ? $match->scheduled_at->format('d/m/Y H:i') : '-' }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ $match->scheduled_at ? $match->scheduled_at->bogota()->format('d/m/Y H:i') : '-' }}</td>
                     <td class="px-6 py-4">
                         <span class="px-2.5 py-1 text-xs font-medium rounded-full {{ $match->status === 'live' ? 'bg-red-100 text-red-600' : ($match->status === 'pending' ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600') }}">
                             {{ $match->status === 'live' ? 'En vivo' : ($match->status === 'pending' ? 'Pendiente' : 'Finalizado') }}

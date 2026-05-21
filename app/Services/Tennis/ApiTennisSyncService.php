@@ -407,23 +407,24 @@ class ApiTennisSyncService
                 'scheduled_at'   => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null),
             ];
 
-            // Prefer to replace a placeholder in the same round if one exists
-            // (so we don't end up with duplicate matches per slot). Placeholders
-            // come from two sources:
-            //   - 'placeholder-%' — TBD slots ensureBracketPlaceholders() creates
-            //                       for R64..F so the empty bracket renders complete.
-            //   - 'bt-bootstrap-%' — R128 rows seeded from bracket.tennis with
-            //                        real players for known seeds plus TBD for any
-            //                        "Qualifier/LL" slots still to be drawn.
-            // For bt-bootstrap rows we also try to match by participating player
-            // (one side may already be a real seed, the other TBD); when both
-            // players match, that's the same slot and we just overwrite.
+            // ─── bracket.tennis is the source of truth for bracket structure ───
+            // api-tennis only ENRICHES existing matches (scores, winners, status).
+            // We never let it create new slots or move bracket_position, because:
+            //   - api-tennis sometimes returns extra fixtures (exhibition matches,
+            //     mixed doubles bleeding into the singles feed, etc.) which would
+            //     create ghost slots that desorganize the visual bracket.
+            //   - surname-based matching is fragile across name spellings, so a
+            //     misspelled player would land in the wrong slot.
+            //
+            // Match lookup order:
+            //   1. Exact match by api_event_key (already-synced fixture).
+            //   2. A bracket.tennis bootstrap slot or placeholder where at least
+            //      one player matches → upgrade that slot.
+            //   3. If neither matches, SKIP this fixture entirely — we don't
+            //      create a new slot.
             $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first();
 
             if (!$existing) {
-                // Try to find a bootstrap slot in the same round where this
-                // match's players overlap with what's already there. Limits
-                // search to current round to avoid cross-round contamination.
                 $candidates = TennisMatch::where('tournament_id', $tournament->id)
                     ->where('round', $round)
                     ->where(function ($q) {
@@ -433,9 +434,9 @@ class ApiTennisSyncService
                     ->orderBy('bracket_position')
                     ->get();
 
-                // 1st pass: find a candidate where at least one player matches.
-                // This handles the qualifier case (real seed vs TBD on bracket.tennis,
-                // then api-tennis fills in the qualifier later).
+                // Find a candidate where at least one player matches. Handles
+                // the qualifier case (real seed vs TBD on bracket.tennis, then
+                // api-tennis fills in the qualifier later).
                 foreach ($candidates as $c) {
                     $matchesP1 = $player1 && ($c->player1_id === $player1->id || $c->player2_id === $player1->id);
                     $matchesP2 = $player2 && ($c->player1_id === $player2->id || $c->player2_id === $player2->id);
@@ -444,28 +445,32 @@ class ApiTennisSyncService
                         break;
                     }
                 }
-
-                // 2nd pass fallback: take the first remaining placeholder/bootstrap
-                // slot. Only used when no player matched — typically a draw where
-                // both spots were TBD on bracket.tennis.
-                if (!$existing) $existing = $candidates->first();
+                // No "first free slot" fallback — that was the source of the
+                // mid-tournament reshuffling. If bracket.tennis didn't predict
+                // this match, we skip it and let the next sync try again once
+                // bracket.tennis catches up (or it's a fixture we don't want).
             }
 
-            if ($existing) {
-                $wasFinished = $existing->status === 'finished';
-                // If this is a placeholder being upgraded, also adopt the real api_event_key
-                $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
-                    || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
-                if ($isPlaceholder) {
-                    $attrs['api_event_key'] = (string) $eventKey;
-                }
-                $existing->update($attrs);
-                if (!$wasFinished && $status === 'finished') $newlyFinished[] = $existing->id;
-            } else {
-                $attrs['api_event_key']    = (string) $eventKey;
-                $attrs['bracket_position'] = $this->nextBracketPosition($tournament, $round);
-                TennisMatch::create($attrs);
+            if (!$existing) {
+                // Skip orphan fixtures rather than inventing slots. The user-visible
+                // bracket structure stays anchored to bracket.tennis.
+                $skippedQualy++; // reuse counter to avoid adding a new return key
+                continue;
             }
+
+            $wasFinished = $existing->status === 'finished';
+            // Adopt the real api_event_key when upgrading a placeholder slot.
+            $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
+                || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
+            if ($isPlaceholder) {
+                $attrs['api_event_key'] = (string) $eventKey;
+            }
+            // CRITICAL: never let api-tennis touch bracket_position. The bracket
+            // layout is owned by bracket.tennis; reorderBracketFromScraper()
+            // is responsible for the canonical positions.
+            unset($attrs['bracket_position']);
+            $existing->update($attrs);
+            if (!$wasFinished && $status === 'finished') $newlyFinished[] = $existing->id;
             $updated++;
         }
 
@@ -668,91 +673,152 @@ class ApiTennisSyncService
             }
         }
 
-        // 2) For each round in DB, place matches based on the player's
-        //    expanded position from bracket.tennis. After we know the OFFICIAL
-        //    slot, we COMPACT positions to be sequential 1..N — that way the
-        //    bracket renderer (which expects sorted contiguous positions) draws
-        //    the tree cleanly while preserving the canonical pair order.
+        // 2) Place R128 matches at their canonical bracket.tennis slot, then
+        //    derive every following round STRUCTURALLY (match at pos K of round
+        //    R is fed by positions 2K-1 and 2K of round R-1). This is purely
+        //    tree-arithmetic — we never re-derive positions from player names
+        //    after R128, so once the bracket is laid out it stays put across
+        //    syncs even when retirees / walkovers / partial fixtures appear.
         $rounds = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
-        $playerToExpandedPos = $surnameToFirstSlot;
 
-        foreach ($rounds as $round) {
-            $dbMatches = $tournament->matches()
+        // ─── R128: anchor positions from the scraped slot map ───────────────
+        // We respect existing positions when the players match the scraper's
+        // expected slot — that way a sync doesn't overwrite a valid position
+        // with one inferred from possibly-stale data.
+        $r128 = $tournament->matches()
+            ->where('round', 'R128')
+            ->with(['player1', 'player2'])
+            ->get();
+
+        if ($r128->isNotEmpty()) {
+            $used = [];
+            $unmatched = [];
+
+            foreach ($r128 as $m) {
+                $slot = null;
+                foreach ([$m->player1?->name, $m->player2?->name] as $name) {
+                    if (!$name) continue;
+                    $key = BracketTennisScraper::surnameKey($name);
+                    if ($key && isset($surnameToFirstSlot[$key])) {
+                        // bracket_position is 1-indexed match number (1..64);
+                        // surnameToFirstSlot returns the *expanded* slot of the
+                        // player (0..127), so we floor-divide by 2 to map back
+                        // to the match number, then +1 to 1-index.
+                        $slot = intdiv($surnameToFirstSlot[$key], 2) + 1;
+                        break;
+                    }
+                }
+                if ($slot === null) {
+                    $unmatched[] = $m;
+                    continue;
+                }
+                // If another match already claimed this slot, keep the first
+                // and queue the second to fill a hole later. (Should be rare.)
+                if (isset($used[$slot])) {
+                    $unmatched[] = $m;
+                    continue;
+                }
+                $used[$slot] = $m->id;
+                if ($m->bracket_position !== $slot) {
+                    $m->update(['bracket_position' => $slot]);
+                }
+            }
+
+            // Place unmatched / collided matches in the still-free slots so
+            // the tree stays contiguous (1..64). We sort by current position
+            // first so existing layouts are disturbed as little as possible.
+            $unmatched = collect($unmatched)->sortBy('bracket_position')->values();
+            $next = 1;
+            foreach ($unmatched as $m) {
+                while (isset($used[$next]) && $next <= 64) $next++;
+                $used[$next] = $m->id;
+                if ($m->bracket_position !== $next) {
+                    $m->update(['bracket_position' => $next]);
+                }
+                $next++;
+            }
+        }
+
+        // ─── R64 and beyond: derive positions purely from the previous round ─
+        // Match at position K of round R is fed by positions 2K-1 and 2K of
+        // round R-1. We figure out which player came from which feeder pair,
+        // and assign each round-R match accordingly. This eliminates the
+        // surname-propagation drift that used to shuffle the bracket every sync.
+        for ($i = 1; $i < count($rounds); $i++) {
+            $round     = $rounds[$i];
+            $prevRound = $rounds[$i - 1];
+
+            $current = $tournament->matches()
                 ->where('round', $round)
                 ->with(['player1', 'player2'])
                 ->get();
-            if ($dbMatches->isEmpty()) continue;
+            if ($current->isEmpty()) continue;
 
-            // Step A: compute the OFFICIAL slot for each match
-            $officialSlot = [];   // match_id => slot
-            $playersOf    = [];   // match_id => [surname1, surname2]
-            $unmatched    = [];   // matches with no scraper info
-            foreach ($dbMatches as $m) {
-                $surnames = [];
-                foreach ([$m->player1?->name, $m->player2?->name] as $name) {
-                    if (!$name) continue;
-                    $surnames[] = BracketTennisScraper::surnameKey($name);
-                }
-                $playersOf[$m->id] = $surnames;
-                $expandedPositions = [];
-                foreach ($surnames as $s) {
-                    if ($s && isset($playerToExpandedPos[$s])) {
-                        $expandedPositions[] = $playerToExpandedPos[$s];
-                    }
-                }
-                if (empty($expandedPositions)) {
-                    $unmatched[] = $m->id;
-                } else {
-                    $officialSlot[$m->id] = min($expandedPositions);
-                }
-            }
+            $prev = $tournament->matches()
+                ->where('round', $prevRound)
+                ->with(['player1', 'player2', 'winner'])
+                ->get()
+                ->keyBy('bracket_position');
 
-            // Step B: assign each match to its TREE slot (1..N) where N is the
-            // expected number of matches in this round.
-            // Each player's expanded position halves once per round, so the
-            // tree slot is: floor(expanded_pos / 2) + 1.
-            //
-            // Real matches keep their canonical position. Placeholders fill the
-            // remaining slots so the bracket tree stays contiguous and the
-            // R128→QF→F lineage stays correct.
             $expectedTotal = match ($round) {
-                'R128' => 64, 'R64' => 32, 'R32' => 16, 'R16' => 8,
-                'QF'   => 4,  'SF'  => 2,  'F'   => 1, default => count($dbMatches),
+                'R64' => 32, 'R32' => 16, 'R16' => 8,
+                'QF'  => 4,  'SF'  => 2,  'F'   => 1,
+                default => $current->count(),
             };
 
-            // Sort real matches by their (halved) tree slot, NOT by raw expanded position
-            $treeSlot = [];
-            foreach ($officialSlot as $matchId => $expandedPos) {
-                $treeSlot[$matchId] = intdiv($expandedPos, 2) + 1;
+            // For each current-round match, find the highest-information feeder
+            // pair (any of its players already won a prev-round match). The
+            // match takes position ceil(feeder_pos / 2).
+            $assignments = [];   // bracket_position => $match
+            $unresolved  = [];   // matches we couldn't place by feeder lookup
+
+            foreach ($current as $m) {
+                $playerIds = array_filter([$m->player1_id, $m->player2_id]);
+                $bestFeederPos = null;
+                foreach ($prev as $pos => $pm) {
+                    if (in_array($pm->winner_id, $playerIds, true)
+                        || in_array($pm->player1_id, $playerIds, true)
+                        || in_array($pm->player2_id, $playerIds, true)) {
+                        $bestFeederPos = $bestFeederPos === null ? $pos : min($bestFeederPos, $pos);
+                    }
+                }
+                if ($bestFeederPos === null) {
+                    $unresolved[] = $m;
+                    continue;
+                }
+                $slot = intdiv($bestFeederPos + 1, 2); // ceil(feederPos / 2)
+                // Collision: keep the one with the lower id (older row).
+                if (isset($assignments[$slot])) {
+                    if ($assignments[$slot]->id < $m->id) {
+                        $unresolved[] = $m;
+                        continue;
+                    }
+                    $unresolved[] = $assignments[$slot];
+                }
+                $assignments[$slot] = $m;
             }
 
-            // Resolve collisions: if two real matches collide on the same slot,
-            // the second one moves to the next free slot. (Should be rare with
-            // bracket.tennis as source — only happens if API put extra fixtures.)
-            asort($treeSlot);
+            // Write the resolved positions.
             $used = [];
-            foreach ($treeSlot as $matchId => $slot) {
-                while (isset($used[$slot]) && $slot <= $expectedTotal) $slot++;
+            foreach ($assignments as $slot => $m) {
                 $used[$slot] = true;
-                $dbMatches->firstWhere('id', $matchId)->update(['bracket_position' => $slot]);
+                if ($m->bracket_position !== $slot) {
+                    $m->update(['bracket_position' => $slot]);
+                }
             }
 
-            // Place placeholders in the still-free slots so the tree is contiguous.
+            // Fill the remaining slots with unresolved matches in their
+            // existing-position order — minimises movement when we have a
+            // partial bracket and the structural lookup couldn't help.
+            $unresolved = collect($unresolved)->sortBy('bracket_position')->values();
             $next = 1;
-            foreach ($unmatched as $matchId) {
-                while (isset($used[$next])) $next++;
+            foreach ($unresolved as $m) {
+                while (isset($used[$next]) && $next <= $expectedTotal) $next++;
                 $used[$next] = true;
-                $dbMatches->firstWhere('id', $matchId)->update(['bracket_position' => $next]);
+                if ($m->bracket_position !== $next) {
+                    $m->update(['bracket_position' => $next]);
+                }
                 $next++;
-            }
-
-            // Step C: propagate ALL players' expanded positions to the next
-            // round by halving. We do this for everyone — including players
-            // whose match didn't appear in the current round — so positions
-            // stay consistent across the entire tree even when only part of
-            // the bracket has real fixtures yet.
-            foreach ($playerToExpandedPos as $s => $v) {
-                $playerToExpandedPos[$s] = intdiv($v, 2);
             }
         }
     }

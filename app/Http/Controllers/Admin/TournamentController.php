@@ -28,7 +28,11 @@ class TournamentController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
-            'type' => 'required|in:ATP,WTA,GrandSlam',
+            // Allow both the legacy short codes (ATP / WTA / GrandSlam) and the
+            // full tier strings produced by the api-tennis sync ("ATP Masters 1000",
+            // "WTA 1000", "ATP Grand Slam", "WTA Grand Slam"). If we only accept
+            // the short codes, editing a synced tournament rewrites its tier.
+            'type' => 'required|in:ATP,WTA,GrandSlam,ATP Masters 1000,WTA 1000,ATP Grand Slam,WTA Grand Slam',
             'location' => 'required|string',
             'city' => 'required|string',
             'country' => 'required|string',
@@ -76,7 +80,8 @@ class TournamentController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
-            'type' => 'required|in:ATP,WTA,GrandSlam',
+            // See store(): accept both legacy short codes and full tier strings.
+            'type' => 'required|in:ATP,WTA,GrandSlam,ATP Masters 1000,WTA 1000,ATP Grand Slam,WTA Grand Slam',
             'location' => 'required|string',
             'city' => 'required|string',
             'country' => 'required|string',

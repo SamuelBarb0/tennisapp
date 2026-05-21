@@ -36,7 +36,7 @@
                         </div>
                     </td>
                     <td class="px-6 py-4 text-sm font-medium">{{ $redemption->prize->name ?? '-' }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $redemption->created_at->format('d/m/Y H:i') }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ $redemption->created_at->bogota()->format('d/m/Y H:i') }}</td>
                     <td class="px-6 py-4">
                         <form action="{{ route('admin.redemptions.update', $redemption) }}" method="POST" class="inline" x-data>
                             @csrf @method('PATCH')

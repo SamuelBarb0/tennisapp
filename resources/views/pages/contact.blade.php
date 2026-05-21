@@ -111,7 +111,7 @@
         @endif
 
         <p class="px-8 pb-6 text-xs text-gray-400 text-center">
-            Última actualización: {{ $page->updated_at?->format('d/m/Y') }}
+            Última actualización: {{ $page->updated_at?->bogota()->format('d/m/Y') }}
         </p>
     </div>
 </div>

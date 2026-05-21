@@ -217,6 +217,55 @@ class MercadoPagoService
         };
     }
 
+    /**
+     * Check whether a Mercado Pago preference has any associated payment.
+     * Used by the abandoned-payment sweeper to confirm "the user really didn't
+     * pay" before cancelling our local row.
+     *
+     * Returns:
+     *   - 'approved'  → an approved payment exists; caller should sync it
+     *   - 'pending'   → preference exists with an in-process payment
+     *   - 'abandoned' → no payment ever started for this preference
+     *   - 'unknown'   → couldn't reach MP / preference not found
+     */
+    public function checkPreferenceStatus(string $preferenceId): string
+    {
+        try {
+            // Search payments by external_reference (our TournamentPayment id).
+            // We don't search by preference_id directly because the SDK's search
+            // endpoint indexes external_reference more reliably.
+            $client = new PaymentClient();
+            $results = $client->search([
+                'criteria' => 'desc',
+                'limit'    => 5,
+                'preference_id' => $preferenceId,
+            ]);
+
+            $items = is_object($results) && isset($results->results) ? $results->results : [];
+            if (empty($items)) return 'abandoned';
+
+            // Walk results — if ANY is approved, treat the whole preference as approved.
+            foreach ($items as $p) {
+                $rawStatus = isset($p->status) ? (string) $p->status : '';
+                $status = $this->mapStatus($rawStatus);
+                if ($status === 'approved') return 'approved';
+            }
+            return 'pending';
+        } catch (MPApiException $e) {
+            Log::warning('MP preference status check failed', [
+                'preference_id' => $preferenceId,
+                'message'       => $e->getMessage(),
+            ]);
+            return 'unknown';
+        } catch (\Throwable $e) {
+            Log::error('MP preference status check crashed', [
+                'preference_id' => $preferenceId,
+                'message'       => $e->getMessage(),
+            ]);
+            return 'unknown';
+        }
+    }
+
     private function isSandbox(): bool
     {
         $token = config('services.mercadopago.access_token', '');

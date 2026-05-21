@@ -116,8 +116,8 @@
                         <span class="inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border {{ $statusCfg[0] }}">{{ $statusCfg[1] }}</span>
                     </td>
                     <td class="px-5 py-3 text-xs text-gray-500">
-                        <div>{{ $p->created_at->format('d M Y') }}</div>
-                        <div class="text-[10px] text-gray-400">{{ $p->created_at->format('H:i') }}</div>
+                        <div>{{ $p->created_at->bogota()->format('d M Y') }}</div>
+                        <div class="text-[10px] text-gray-400">{{ $p->created_at->bogota()->format('H:i') }}</div>
                     </td>
                     <td class="px-5 py-3 font-mono text-[11px] text-gray-500">
                         {{ $p->mp_payment_id ?? '—' }}

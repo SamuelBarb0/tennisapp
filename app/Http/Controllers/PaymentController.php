@@ -45,11 +45,13 @@ class PaymentController extends Controller
      */
     public function returnFromMp(Request $request, MercadoPagoService $mp)
     {
-        $status = $request->query('status', 'pending');
+        $status      = $request->query('status', 'pending');
         $mpPaymentId = $request->query('payment_id');
         $externalRef = $request->query('external_reference');
 
-        // Best-effort sync — webhook may already have processed this, that's fine.
+        // Best-effort sync — when MP redirects with a payment_id we pull the
+        // fresh status from its API to avoid showing "Pago en proceso" while
+        // the webhook is racing the redirect.
         if ($mpPaymentId) {
             $mp->syncPayment($mpPaymentId);
         }
@@ -57,6 +59,40 @@ class PaymentController extends Controller
         $payment = null;
         if ($externalRef) {
             $payment = \App\Models\TournamentPayment::with('tournament')->find($externalRef);
+        }
+
+        // Secondary fallback: if the redirect didn't carry a payment_id (typical
+        // when the user closes the MP tab and lands here via back_url=pending)
+        // we still try to resolve the status by searching MP for any payment
+        // tied to our preference. Keeps the return screen aligned with reality
+        // instead of forcing the user to wait for the 15-min sweeper.
+        if ($payment && $payment->status === 'pending' && $payment->preference_id) {
+            $resolution = $mp->checkPreferenceStatus($payment->preference_id);
+            if ($resolution === 'approved') {
+                // There's an approved payment for this preference — find its id
+                // via the SDK and run syncPayment to update our local row.
+                try {
+                    $client = new \MercadoPago\Client\Payment\PaymentClient();
+                    $results = $client->search([
+                        'criteria'      => 'desc',
+                        'limit'         => 5,
+                        'preference_id' => $payment->preference_id,
+                    ]);
+                    $items = is_object($results) && isset($results->results) ? $results->results : [];
+                    foreach ($items as $p) {
+                        if (($p->status ?? null) === 'approved' && isset($p->id)) {
+                            $mp->syncPayment((string) $p->id);
+                            break;
+                        }
+                    }
+                    $payment = $payment->fresh(['tournament']);
+                } catch (\Throwable $e) {
+                    Log::warning('Could not resolve approved payment on return', [
+                        'payment_id' => $payment->id,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
+            }
         }
 
         return view('payments.return', compact('status', 'payment'));

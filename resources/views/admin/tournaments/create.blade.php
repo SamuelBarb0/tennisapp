@@ -18,10 +18,24 @@
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Tipo</label>
+                @php
+                    // Same tier list as edit.blade.php — sync stores full strings
+                    // ("ATP Masters 1000", "WTA Grand Slam", etc.), so we keep them
+                    // available as options on creation too for consistency.
+                    $tournamentTypes = [
+                        'ATP Grand Slam'   => 'ATP Grand Slam',
+                        'WTA Grand Slam'   => 'WTA Grand Slam',
+                        'ATP Masters 1000' => 'ATP Masters 1000',
+                        'WTA 1000'         => 'WTA 1000',
+                        'ATP'              => 'ATP (genérico)',
+                        'WTA'              => 'WTA (genérico)',
+                        'GrandSlam'        => 'Grand Slam (legado)',
+                    ];
+                @endphp
                 <select name="type" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
-                    <option value="ATP" {{ old('type') === 'ATP' ? 'selected' : '' }}>ATP Masters 1000</option>
-                    <option value="WTA" {{ old('type') === 'WTA' ? 'selected' : '' }}>WTA 1000</option>
-                    <option value="GrandSlam" {{ old('type') === 'GrandSlam' ? 'selected' : '' }}>Grand Slam</option>
+                    @foreach($tournamentTypes as $value => $label)
+                        <option value="{{ $value }}" {{ old('type') === $value ? 'selected' : '' }}>{{ $label }}</option>
+                    @endforeach
                 </select>
             </div>
             <div>

@@ -36,6 +36,10 @@ class MatchController extends Controller
             'round' => 'required|string',
             'scheduled_at' => 'required|date',
         ]);
+        // The admin form shows the datetime as Colombia time (the input label
+        // says "(hora Colombia)"), so we treat the raw input as Bogotá-local
+        // and convert to UTC for storage to keep the rest of the app consistent.
+        $data['scheduled_at'] = \Carbon\Carbon::parse($data['scheduled_at'], 'America/Bogota')->setTimezone('UTC');
         $data['status'] = 'pending';
         TennisMatch::create($data);
         return redirect()->route('admin.matches.index')->with('success', 'Partido creado.');
@@ -60,6 +64,8 @@ class MatchController extends Controller
             'winner_id' => 'nullable|exists:players,id',
             'status' => 'required|in:pending,live,finished',
         ]);
+        // See store(): same Bogotá → UTC conversion for the datetime input.
+        $data['scheduled_at'] = \Carbon\Carbon::parse($data['scheduled_at'], 'America/Bogota')->setTimezone('UTC');
         $match->update($data);
         return redirect()->route('admin.matches.index')->with('success', 'Partido actualizado.');
     }

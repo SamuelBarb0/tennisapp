@@ -21,7 +21,7 @@
                 @endif
             </div>
             <p class="text-sm text-gray-500">{{ $user->email }}</p>
-            <p class="text-xs text-gray-400 mt-1">Registrado: {{ $user->created_at->format('d/m/Y H:i') }}</p>
+            <p class="text-xs text-gray-400 mt-1">Registrado: {{ $user->created_at->bogota()->format('d/m/Y H:i') }}</p>
         </div>
         <div class="flex flex-wrap gap-2" x-data="{ panel: null }">
             <form action="{{ route('admin.users.toggle-block', $user) }}" method="POST">
@@ -143,7 +143,7 @@
                         @endif
                     </td>
                     <td class="px-6 py-4 text-sm font-medium">{{ $prediction->points_earned ?? 0 }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $prediction->created_at->format('d/m/Y') }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ $prediction->created_at->bogota()->format('d/m/Y') }}</td>
                 </tr>
                 @empty
                 <tr>
@@ -181,7 +181,7 @@
                             {{ $redemption->status === 'completed' ? 'Completado' : ($redemption->status === 'pending' ? 'Pendiente' : ($redemption->status === 'rejected' ? 'Rechazado' : $redemption->status)) }}
                         </span>
                     </td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $redemption->created_at->format('d/m/Y') }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ $redemption->created_at->bogota()->format('d/m/Y') }}</td>
                 </tr>
                 @empty
                 <tr>

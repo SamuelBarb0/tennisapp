@@ -13,7 +13,7 @@
             {!! $page->content !!}
         </div>
         <p class="mt-10 pt-6 border-t border-gray-100 text-xs text-gray-400">
-            Última actualización: {{ $page->updated_at?->format('d/m/Y') }}
+            Última actualización: {{ $page->updated_at?->bogota()->format('d/m/Y') }}
         </p>
     </div>
 </div>

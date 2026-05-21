@@ -72,8 +72,8 @@
                 @error('round') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1.5">Fecha y hora</label>
-                <input type="datetime-local" name="scheduled_at" value="{{ old('scheduled_at', $match->scheduled_at ? $match->scheduled_at->format('Y-m-d\TH:i') : '') }}" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Fecha y hora <span class="text-[10px] font-normal text-gray-400">(hora Colombia)</span></label>
+                <input type="datetime-local" name="scheduled_at" value="{{ old('scheduled_at', $match->scheduled_at ? $match->scheduled_at->bogota()->format('Y-m-d\TH:i') : '') }}" required class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
                 @error('scheduled_at') <p class="text-red-500 text-xs mt-1">{{ $message }}</p> @enderror
             </div>
         </div>
