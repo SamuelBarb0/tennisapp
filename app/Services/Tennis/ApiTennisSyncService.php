@@ -596,23 +596,15 @@ class ApiTennisSyncService
         // 1) Build surname → R128 slot map from the scraped draw.
         //    Also keep surname → seed/Q/WC tag AND surname → country (ISO-3)
         //    so we can patch missing flags from bracket.tennis as fallback.
-        //
-        //    `$surnamesInDraw` tracks every player the scraper showed (with or
-        //    without seed) so we can CLEAR stale seeds on players who used to
-        //    have one in a previous tournament but are unseeded in this draw.
-        //    Without this, a player who once had seed='1' would keep it forever
-        //    because the seed-update loop below was additive only.
         $surnameToFirstSlot = [];
         $surnameToSeed = [];
         $surnameToCountry = [];
-        $surnamesInDraw = [];
         foreach ($draw as $entry) {
             foreach (['p1', 'p2'] as $side) {
                 $name = $entry[$side];
                 if (!$name || strcasecmp($name, 'Bye') === 0) continue;
                 $key = BracketTennisScraper::surnameKey($name);
                 if ($key === '') continue;
-                $surnamesInDraw[$key] = true;
                 if (!isset($surnameToFirstSlot[$key])) {
                     $expandedPos = ($entry['slot'] * 2) + ($side === 'p2' ? 1 : 0);
                     $surnameToFirstSlot[$key] = $expandedPos;
@@ -631,30 +623,15 @@ class ApiTennisSyncService
         // Apply seeds to every match (winners keep their seed throughout the
         // bracket). Also patch missing player country/flag from bracket.tennis
         // when the api-tennis data didn't provide it (e.g. Townsend, Kessler).
-        //
-        // For seeds that DON'T appear in any R128 match (they had a bye in the
-        // first round), we ALSO patch their seed on every other-round match
-        // where they show up — that way the bracket displays their tournament
-        // seed everywhere, not the world ranking fallback.
         foreach ($tournament->matches()->with(['player1', 'player2'])->get() as $m) {
             $updates = [];
             foreach (['player1' => 'player1_seed', 'player2' => 'player2_seed'] as $rel => $col) {
                 $p = $m->{$rel};
                 if (!$p || $p->name === 'TBD') continue;
                 $sk = BracketTennisScraper::surnameKey($p->name);
-
-                if (isset($surnameToSeed[$sk])) {
-                    // Scraper says this player has a seed (number/Q/WC/etc.)
-                    if ($m->$col !== $surnameToSeed[$sk]) {
-                        $updates[$col] = $surnameToSeed[$sk];
-                    }
-                } elseif (isset($surnamesInDraw[$sk]) && $m->$col !== null) {
-                    // Scraper showed the player but DIDN'T mark them as a seed.
-                    // Clear any stale seed inherited from a previous tournament
-                    // (this is what fixed the "Y. Wu shown as seed=1" case).
-                    $updates[$col] = null;
+                if (isset($surnameToSeed[$sk]) && $m->$col !== $surnameToSeed[$sk]) {
+                    $updates[$col] = $surnameToSeed[$sk];
                 }
-
                 // Backfill country from BT if missing or "Unknown"
                 if (isset($surnameToCountry[$sk]) && (!$p->nationality_code || $p->country === 'Unknown' || $p->iso2 === 'un')) {
                     $iso3 = strtoupper($surnameToCountry[$sk]);
@@ -1330,6 +1307,19 @@ class ApiTennisSyncService
      */
     private function formatScore(array $fixture): ?string
     {
+        // Quick reject: if the match isn't actually in progress / finished,
+        // any score api-tennis sends is noise — we return null so the bracket
+        // card stays clean instead of rendering a phantom "0-0".
+        $status = mb_strtolower((string) ($fixture['event_status'] ?? ''));
+        $isInPlay = $status === 'finished'
+            || $status === 'live'
+            || $status === 'in progress'
+            || $status === 'walkover'
+            || $status === 'retired'
+            || str_starts_with($status, 'set ')
+            || str_contains($status, 'suspended');
+        if (!$isInPlay) return null;
+
         $sets = $fixture['scores'] ?? null;
         if (is_array($sets) && !empty($sets)) {
             $parts = [];
@@ -1339,7 +1329,13 @@ class ApiTennisSyncService
                 if ($first === null || $second === null) continue;
                 $parts[] = $first . '-' . $second;
             }
-            if (!empty($parts)) return implode(' ', $parts);
+            if (!empty($parts)) {
+                $candidate = implode(' ', $parts);
+                // Reject when every set is "0-0" — happens when the API
+                // pre-populates the scores array before play actually begins.
+                if (preg_replace('/[\s0-]/', '', $candidate) === '') return null;
+                return $candidate;
+            }
         }
         // Fallback to the aggregate "X - Y" string the API emits. Strip whitespace
         // before comparing because the API uses " 0 - 0 " with surrounding spaces.
