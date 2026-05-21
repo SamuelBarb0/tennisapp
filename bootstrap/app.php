@@ -19,6 +19,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'payments/mp/webhook',
         ]);
+
+        // Trust X-Forwarded-* headers from any proxy. This is what makes
+        // route() generate https:// URLs when we're behind ngrok / Cloudflare
+        // / a Hostinger load balancer that terminates SSL upstream. Without
+        // this, route() falls back to http:// even if APP_URL is https://,
+        // which Mercado Pago rejects with "back_url.success must be defined".
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

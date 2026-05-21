@@ -79,6 +79,9 @@
             @if(session('error'))
                 message = '{{ session('error') }}'; type = 'error'; show = true; setTimeout(() => show = false, 4000);
             @endif
+            @if(session('info'))
+                message = '{{ session('info') }}'; type = 'info'; show = true; setTimeout(() => show = false, 5000);
+            @endif
          "
          x-show="show"
          x-transition:enter="transition ease-out duration-300"
@@ -90,12 +93,15 @@
          x-cloak
          class="fixed top-6 right-6 z-[100] max-w-sm"
     >
-        <div :class="type === 'success' ? 'bg-green-500' : 'bg-red-500'" class="text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-3">
+        <div :class="type === 'success' ? 'bg-green-500' : (type === 'error' ? 'bg-red-500' : 'bg-amber-500')" class="text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-3">
             <template x-if="type === 'success'">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
             </template>
             <template x-if="type === 'error'">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </template>
+            <template x-if="type === 'info'">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </template>
             <span x-text="message" class="text-sm font-medium"></span>
             <button @click="show = false" class="ml-2">

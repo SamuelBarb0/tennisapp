@@ -38,9 +38,12 @@ Schedule::command('tennis:sync-live --all')
     ->runInBackground();
 
 // ── 3. Payment sweeper (every 15 min) ───────────────────────────────────────
-// Resolves Mercado Pago checkouts the user abandoned. Cancels truly abandoned
-// pending payments and rescues any approved payments whose webhook was lost.
-Schedule::command('payments:cancel-abandoned --minutes=30')
+// Resolves Mercado Pago checkouts the user abandoned. Cancels pending rows
+// older than 10 min (long enough for slow PSE/Nequi confirmations to land,
+// short enough that an abandoned cart stops looking like "en proceso" within
+// a single sync cycle). Also rescues any approved payments whose webhook
+// never reached us.
+Schedule::command('payments:cancel-abandoned --minutes=10')
     ->everyFifteenMinutes()
     ->withoutOverlapping(10)
     ->onOneServer();

@@ -40,8 +40,9 @@ class PaymentController extends Controller
     }
 
     /**
-     * MP redirects the user back here after the checkout. We use this only for the UX
-     * (showing a "thanks" page); the source of truth is the webhook.
+     * MP redirects the user back here after the checkout. We bounce them
+     * straight to the tournament they were paying for with a flash message
+     * that explains the result — no intermediate "pago en proceso" page.
      */
     public function returnFromMp(Request $request, MercadoPagoService $mp)
     {
@@ -49,9 +50,9 @@ class PaymentController extends Controller
         $mpPaymentId = $request->query('payment_id');
         $externalRef = $request->query('external_reference');
 
-        // Best-effort sync — when MP redirects with a payment_id we pull the
-        // fresh status from its API to avoid showing "Pago en proceso" while
-        // the webhook is racing the redirect.
+        // Best-effort sync — MP usually has the payment status ready a few
+        // hundred ms after the redirect, so we ask directly instead of
+        // waiting for the webhook.
         if ($mpPaymentId) {
             $mp->syncPayment($mpPaymentId);
         }
@@ -61,27 +62,55 @@ class PaymentController extends Controller
             $payment = \App\Models\TournamentPayment::with('tournament')->find($externalRef);
         }
 
-        // Secondary fallback: if the redirect didn't carry a payment_id (typical
-        // when the user closes the MP tab and lands here via back_url=pending)
-        // we still try to resolve the status by searching MP for any payment
-        // tied to our preference. Keeps the return screen aligned with reality
-        // instead of forcing the user to wait for the 15-min sweeper.
+        // Secondary fallback when MP redirected without a payment_id (typical
+        // for closed-tab returns landing at status=pending or status=failure).
+        // Search MP by our preference id to find out what really happened.
+        //
+        // Three outcomes from MP's side:
+        //   - 'approved':   sync the payment and unlock the bracket.
+        //   - 'abandoned':  no payment record on MP — user clicked "Volver a
+        //                   la tienda" without paying. Cancel our local row
+        //                   immediately so the UI doesn't show "en proceso".
+        //   - 'pending':    real pending (PSE/Nequi waiting confirmation) —
+        //                   leave alone, the webhook will fire later.
+        // Decisión rápida sin esperar a MP: si MP nos redirige a `status=failure`
+        // o el usuario llega SIN payment_id (señal típica de "Volver a la
+        // tienda"), cancelamos inmediatamente. La consulta a MP es solo para
+        // pillar el caso raro de un pago aprobado cuyo webhook llegó tarde.
+        if ($payment && $payment->status === 'pending') {
+            $userBailed = $status === 'failure'
+                || ($status === 'pending' && !$mpPaymentId);
+
+            if ($userBailed) {
+                // Confirmar con MP por si el usuario sí pagó pero MP redirigió mal.
+                $resolution = $payment->preference_id
+                    ? $mp->checkPreferenceStatus($payment->preference_id)
+                    : 'abandoned';
+                if ($resolution !== 'approved' && $resolution !== 'pending') {
+                    $payment->update(['status' => 'cancelled']);
+                    $payment = $payment->fresh(['tournament']);
+                }
+            }
+        }
+
+        // Si tras lo anterior el row sigue pending y la URL trae payment_id,
+        // hacemos la segunda verificación clásica buscando un pago aprobado
+        // con webhook lento.
         if ($payment && $payment->status === 'pending' && $payment->preference_id) {
             $resolution = $mp->checkPreferenceStatus($payment->preference_id);
+
             if ($resolution === 'approved') {
-                // There's an approved payment for this preference — find its id
-                // via the SDK and run syncPayment to update our local row.
                 try {
                     $client = new \MercadoPago\Client\Payment\PaymentClient();
-                    $results = $client->search([
-                        'criteria'      => 'desc',
-                        'limit'         => 5,
-                        'preference_id' => $payment->preference_id,
-                    ]);
+                    $filters = ['preference_id' => $payment->preference_id];
+                    $searchRequest = new \MercadoPago\Net\MPSearchRequest(5, 0, $filters);
+                    $results = $client->search($searchRequest);
                     $items = is_object($results) && isset($results->results) ? $results->results : [];
                     foreach ($items as $p) {
-                        if (($p->status ?? null) === 'approved' && isset($p->id)) {
-                            $mp->syncPayment((string) $p->id);
+                        $pStatus = is_array($p) ? ($p['status'] ?? null) : ($p->status ?? null);
+                        $pId     = is_array($p) ? ($p['id'] ?? null)     : ($p->id ?? null);
+                        if ($pStatus === 'approved' && $pId) {
+                            $mp->syncPayment((string) $pId);
                             break;
                         }
                     }
@@ -95,7 +124,32 @@ class PaymentController extends Controller
             }
         }
 
-        return view('payments.return', compact('status', 'payment'));
+        // No payment row → user came in via a stale URL or stripped query
+        // params. Send them home, nothing else we can do.
+        if (!$payment || !$payment->tournament) {
+            return redirect()->route('home')
+                ->with('info', 'No encontramos el pago. Si te cobraron, revisa tu correo o intenta de nuevo desde el torneo.');
+        }
+
+        // Decide the flash message based on the truth from our DB (set by
+        // the webhook or the immediate syncPayment above), falling back to
+        // the query string from MP.
+        $effective = match (true) {
+            $payment->status === 'approved'  => 'approved',
+            $payment->status === 'rejected'  => 'rejected',
+            $payment->status === 'cancelled' => 'cancelled',
+            $status === 'success'            => 'approved',
+            $status === 'failure'            => 'rejected',
+            default                          => 'pending',
+        };
+
+        $redirect = redirect()->route('tournaments.show', $payment->tournament);
+        return match ($effective) {
+            'approved'  => $redirect->with('success', '¡Pago aprobado! Ya puedes llenar tu bracket.'),
+            'rejected'  => $redirect->with('error',   'El pago fue rechazado. Intenta con otro medio de pago.'),
+            'cancelled' => $redirect->with('info',    'El pago fue cancelado. Cuando quieras reintentarlo, vuelve a darle "Pagar".'),
+            default     => $redirect->with('info',    'Tu pago está en proceso. Cuando Mercado Pago lo confirme (suele ser cuestión de minutos) podrás llenar tu bracket.'),
+        };
     }
 
     /**

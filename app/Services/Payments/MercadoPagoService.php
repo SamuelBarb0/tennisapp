@@ -53,6 +53,17 @@ class MercadoPagoService
             ]
         );
 
+        // Debug: log the URLs we're sending to MP so we can diagnose
+        // "back_url.success must be defined" errors. Sometimes route() picks
+        // up the request host instead of APP_URL, which gives localhost in
+        // dev even when .env is set to a public URL.
+        $debugBackUrl = route('payments.mp.return', ['status' => 'success']);
+        Log::info('MP back_urls debug', [
+            'app_url'        => config('app.url'),
+            'route_success'  => $debugBackUrl,
+            'is_localhost'   => str_contains($debugBackUrl, 'localhost') || str_contains($debugBackUrl, '127.0.0.1'),
+        ]);
+
         $client = new PreferenceClient();
         $request = [
             'items' => [
@@ -69,6 +80,10 @@ class MercadoPagoService
                 'email' => $user->email,
                 'name'  => $user->name,
             ],
+            // Mercado Pago requires back_urls to be public HTTPS URLs (not
+            // localhost). If APP_URL points to localhost we still build the
+            // routes but they'll fail validation — the caller should set
+            // APP_URL to a public ngrok URL when testing locally.
             'back_urls' => [
                 'success' => route('payments.mp.return', ['status' => 'success']),
                 'failure' => route('payments.mp.return', ['status' => 'failure']),
@@ -231,22 +246,20 @@ class MercadoPagoService
     public function checkPreferenceStatus(string $preferenceId): string
     {
         try {
-            // Search payments by external_reference (our TournamentPayment id).
-            // We don't search by preference_id directly because the SDK's search
-            // endpoint indexes external_reference more reliably.
+            // Search payments tied to this preference. The MP SDK expects an
+            // MPSearchRequest object (not a plain array) — this changed in
+            // mercadopago/sdk-php 3.x and silently breaks if you pass an array.
             $client = new PaymentClient();
-            $results = $client->search([
-                'criteria' => 'desc',
-                'limit'    => 5,
-                'preference_id' => $preferenceId,
-            ]);
+            $filters = ['preference_id' => $preferenceId];
+            $searchRequest = new \MercadoPago\Net\MPSearchRequest(5, 0, $filters);
+            $results = $client->search($searchRequest);
 
             $items = is_object($results) && isset($results->results) ? $results->results : [];
             if (empty($items)) return 'abandoned';
 
             // Walk results — if ANY is approved, treat the whole preference as approved.
             foreach ($items as $p) {
-                $rawStatus = isset($p->status) ? (string) $p->status : '';
+                $rawStatus = is_array($p) ? ($p['status'] ?? '') : (isset($p->status) ? (string) $p->status : '');
                 $status = $this->mapStatus($rawStatus);
                 if ($status === 'approved') return 'approved';
             }

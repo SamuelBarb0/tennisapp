@@ -84,8 +84,17 @@ class PaymentsCancelAbandoned extends Command
 
                 case 'unknown':
                 default:
-                    $this->warn("· {$tag} → MP unreachable, keeping for now");
-                    $totals['unknown']++;
+                    // MP preferences expire after ~24h, so a stale pending
+                    // older than a day with no MP record is definitely
+                    // abandoned — cancel it instead of leaving it forever.
+                    if ($ageMin >= 1440) {
+                        $this->line("· {$tag} → MP unreachable + >24h old, cancelling");
+                        if (!$dryRun) $payment->update(['status' => 'cancelled']);
+                        $totals['cancelled']++;
+                    } else {
+                        $this->warn("· {$tag} → MP unreachable, keeping for now");
+                        $totals['unknown']++;
+                    }
                     break;
             }
         }
@@ -106,16 +115,18 @@ class PaymentsCancelAbandoned extends Command
     private function resolveApprovedPayment(MercadoPagoService $mp, TournamentPayment $payment): void
     {
         try {
+            // MP SDK 3.x requires an MPSearchRequest, not a plain array.
+            // Passing an array used to throw a TypeError and crash the sweeper.
             $client = new \MercadoPago\Client\Payment\PaymentClient();
-            $results = $client->search([
-                'criteria'      => 'desc',
-                'limit'         => 5,
-                'preference_id' => $payment->preference_id,
-            ]);
+            $filters = ['preference_id' => $payment->preference_id];
+            $searchRequest = new \MercadoPago\Net\MPSearchRequest(5, 0, $filters);
+            $results = $client->search($searchRequest);
             $items = is_object($results) && isset($results->results) ? $results->results : [];
             foreach ($items as $p) {
-                if (($p->status ?? null) === 'approved' && isset($p->id)) {
-                    $mp->syncPayment((string) $p->id);
+                $pStatus = is_array($p) ? ($p['status'] ?? null) : ($p->status ?? null);
+                $pId     = is_array($p) ? ($p['id'] ?? null)     : ($p->id ?? null);
+                if ($pStatus === 'approved' && $pId) {
+                    $mp->syncPayment((string) $pId);
                     return;
                 }
             }
