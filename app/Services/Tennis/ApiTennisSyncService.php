@@ -408,18 +408,55 @@ class ApiTennisSyncService
             ];
 
             // Prefer to replace a placeholder in the same round if one exists
-            // (so we don't end up with duplicate matches per slot).
-            $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first()
-                ?? TennisMatch::where('tournament_id', $tournament->id)
+            // (so we don't end up with duplicate matches per slot). Placeholders
+            // come from two sources:
+            //   - 'placeholder-%' — TBD slots ensureBracketPlaceholders() creates
+            //                       for R64..F so the empty bracket renders complete.
+            //   - 'bt-bootstrap-%' — R128 rows seeded from bracket.tennis with
+            //                        real players for known seeds plus TBD for any
+            //                        "Qualifier/LL" slots still to be drawn.
+            // For bt-bootstrap rows we also try to match by participating player
+            // (one side may already be a real seed, the other TBD); when both
+            // players match, that's the same slot and we just overwrite.
+            $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first();
+
+            if (!$existing) {
+                // Try to find a bootstrap slot in the same round where this
+                // match's players overlap with what's already there. Limits
+                // search to current round to avoid cross-round contamination.
+                $candidates = TennisMatch::where('tournament_id', $tournament->id)
                     ->where('round', $round)
-                    ->where('api_event_key', 'LIKE', 'placeholder-%')
+                    ->where(function ($q) {
+                        $q->where('api_event_key', 'LIKE', 'placeholder-%')
+                          ->orWhere('api_event_key', 'LIKE', 'bt-bootstrap-%');
+                    })
                     ->orderBy('bracket_position')
-                    ->first();
+                    ->get();
+
+                // 1st pass: find a candidate where at least one player matches.
+                // This handles the qualifier case (real seed vs TBD on bracket.tennis,
+                // then api-tennis fills in the qualifier later).
+                foreach ($candidates as $c) {
+                    $matchesP1 = $player1 && ($c->player1_id === $player1->id || $c->player2_id === $player1->id);
+                    $matchesP2 = $player2 && ($c->player1_id === $player2->id || $c->player2_id === $player2->id);
+                    if ($matchesP1 || $matchesP2) {
+                        $existing = $c;
+                        break;
+                    }
+                }
+
+                // 2nd pass fallback: take the first remaining placeholder/bootstrap
+                // slot. Only used when no player matched — typically a draw where
+                // both spots were TBD on bracket.tennis.
+                if (!$existing) $existing = $candidates->first();
+            }
 
             if ($existing) {
                 $wasFinished = $existing->status === 'finished';
                 // If this is a placeholder being upgraded, also adopt the real api_event_key
-                if (str_starts_with($existing->api_event_key ?? '', 'placeholder-')) {
+                $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
+                    || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
+                if ($isPlaceholder) {
                     $attrs['api_event_key'] = (string) $eventKey;
                 }
                 $existing->update($attrs);
