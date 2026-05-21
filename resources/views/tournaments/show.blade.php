@@ -956,8 +956,20 @@
                                         {{ strtoupper($match->player1->name) }}@if($match->status_note === 'ret_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
                                     </span>
                                     @if($match->score)
+                                        @php
+                                            // When a player retires the API often appends a partial set
+                                            // ("7-5 4-6 0-1") that visually reads as "7 4 0" — confusing
+                                            // because it looks like a normal set. Hide sets that never
+                                            // reached at least 3 games (typical retirement abandon).
+                                            $sets = collect(explode(' ', trim($match->score)))
+                                                ->filter(function ($set) use ($match) {
+                                                    if (!str_contains($match->status_note ?? '', 'ret')) return true;
+                                                    [$a, $b] = array_pad(explode('-', $set), 2, '0');
+                                                    return ((int) $a) >= 3 || ((int) $b) >= 3;
+                                                });
+                                        @endphp
                                         <span class="sets">
-                                            @foreach(explode(' ', $match->score) as $set)
+                                            @foreach($sets as $set)
                                                 @php $s = explode('-', $set); @endphp
                                                 <span class="ss">{{ $s[0] ?? '' }}</span>
                                             @endforeach
@@ -1018,8 +1030,17 @@
                                         {{ strtoupper($match->player2->name) }}@if($match->status_note === 'ret_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
                                     </span>
                                     @if($match->score)
+                                        @php
+                                            // See player1 block above — drop partial sets on retirement.
+                                            $sets = collect(explode(' ', trim($match->score)))
+                                                ->filter(function ($set) use ($match) {
+                                                    if (!str_contains($match->status_note ?? '', 'ret')) return true;
+                                                    [$a, $b] = array_pad(explode('-', $set), 2, '0');
+                                                    return ((int) $a) >= 3 || ((int) $b) >= 3;
+                                                });
+                                        @endphp
                                         <span class="sets">
-                                            @foreach(explode(' ', $match->score) as $set)
+                                            @foreach($sets as $set)
                                                 @php $s = explode('-', $set); @endphp
                                                 <span class="ss">{{ $s[1] ?? '' }}</span>
                                             @endforeach

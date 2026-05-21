@@ -1162,11 +1162,23 @@ class ApiTennisSyncService
         $created = 0;
         $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
         foreach ($draw as $entry) {
+            // Detect BYE slots before resolving players. bracket.tennis emits
+            // "Bye" as one of the two side labels for top seeds who skip the
+            // first round. We model them as `status=bye` matches with the real
+            // player as winner — this way the bracket renderer can show "BYE"
+            // explicitly and inferUnreportedWalkovers won't mistake them for
+            // walkovers (which was the bug that produced "Rybakina vs TBD,
+            // note=wo_p1, winner=TBD" in Dubai).
+            $p1IsBye = $entry['p1'] && strcasecmp($entry['p1'], 'Bye') === 0;
+            $p2IsBye = $entry['p2'] && strcasecmp($entry['p2'], 'Bye') === 0;
+
             $p1 = $this->resolveBootstrapPlayer($entry['p1'], $entry['p1_country'], $tbd, $tour);
             $p2 = $this->resolveBootstrapPlayer($entry['p2'], $entry['p2_country'], $tbd, $tour);
             if (!$p1 || !$p2) continue;
 
-            TennisMatch::create([
+            // For BYE rows, the real player wins automatically and we mark it
+            // as status='bye' so the UI shows "BYE" instead of a fake match.
+            $matchAttrs = [
                 'tournament_id'    => $tournament->id,
                 'player1_id'       => $p1->id,
                 'player2_id'       => $p2->id,
@@ -1174,10 +1186,21 @@ class ApiTennisSyncService
                 'player2_seed'     => $entry['p2_seed'] ?? null,
                 'round'            => $startRound,
                 'bracket_position' => $entry['slot'] + 1, // 1-indexed
-                'status'           => 'pending',
                 'scheduled_at'     => $tournament->start_date ?? now()->addDays(7),
                 'api_event_key'    => 'bt-bootstrap-' . strtolower($startRound) . '-' . $entry['slot'] . '-' . $tournament->id,
-            ]);
+            ];
+
+            if ($p1IsBye && !$p2IsBye) {
+                $matchAttrs['status']    = 'bye';
+                $matchAttrs['winner_id'] = $p2->id;
+            } elseif ($p2IsBye && !$p1IsBye) {
+                $matchAttrs['status']    = 'bye';
+                $matchAttrs['winner_id'] = $p1->id;
+            } else {
+                $matchAttrs['status'] = 'pending';
+            }
+
+            TennisMatch::create($matchAttrs);
             $created++;
         }
 
@@ -1458,13 +1481,24 @@ class ApiTennisSyncService
             // are known, but the match has no real winner and no real score.
             // Covers pending matches AND matches the API marked finished but left
             // winner_id NULL (which is what we've seen in the wild for walkovers).
+            //
+            // Exclusions:
+            //   - status='bye' rows (the bootstrap already set winner_id correctly).
+            //   - matches whose other player is the TBD placeholder (we must never
+            //     mark "RealPlayer vs TBD, winner=TBD" — that was the Dubai bug).
+            $tbdIdForFilter = Player::where('name', 'TBD')->value('id');
             $pending = TennisMatch::where('tournament_id', $tournament->id)
                 ->where('round', $round)
+                ->where('status', '!=', 'bye')
                 ->whereNotNull('player1_id')
                 ->whereNotNull('player2_id')
                 ->whereNull('winner_id')
                 ->where(function ($q) {
                     $q->whereNull('score')->orWhere('score', '0-0')->orWhereRaw("REPLACE(score,' ','') = '0-0'");
+                })
+                ->when($tbdIdForFilter, function ($q) use ($tbdIdForFilter) {
+                    $q->where('player1_id', '!=', $tbdIdForFilter)
+                      ->where('player2_id', '!=', $tbdIdForFilter);
                 })
                 ->get();
 
