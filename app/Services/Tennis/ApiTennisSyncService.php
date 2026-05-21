@@ -442,9 +442,10 @@ class ApiTennisSyncService
                     ->orderBy('bracket_position')
                     ->get();
 
-                // Find a candidate where at least one player matches. Handles
+                // Pass 1: candidate where at least one player matches. Handles
                 // the qualifier case (real seed vs TBD on bracket.tennis, then
-                // api-tennis fills in the qualifier later).
+                // api-tennis fills in the qualifier later) AND the case where
+                // a winner from a previous round already populated one side.
                 foreach ($candidates as $c) {
                     $matchesP1 = $player1 && ($c->player1_id === $player1->id || $c->player2_id === $player1->id);
                     $matchesP2 = $player2 && ($c->player1_id === $player2->id || $c->player2_id === $player2->id);
@@ -453,10 +454,31 @@ class ApiTennisSyncService
                         break;
                     }
                 }
-                // No "first free slot" fallback — that was the source of the
-                // mid-tournament reshuffling. If bracket.tennis didn't predict
-                // this match, we skip it and let the next sync try again once
-                // bracket.tennis catches up (or it's a fixture we don't want).
+
+                // Pass 2: synthetic 'placeholder-%' slot with TBD-vs-TBD. These
+                // are the rows ensureBracketPlaceholders() seeded for later
+                // rounds (R64+ when starting from R128, R32+ when starting
+                // from R64). Player matching can't work because both sides are
+                // TBD, so we fill them in bracket_position order.
+                //
+                // Restricted to 'placeholder-%' on purpose: never overwrite a
+                // 'bt-bootstrap-%' slot from bracket.tennis with a mismatched
+                // fixture — bracket.tennis is the structural authority and a
+                // mismatched player would scramble the bracket again.
+                if (!$existing) {
+                    $tbdId = Player::where('name', 'TBD')->value('id');
+                    foreach ($candidates as $c) {
+                        $isSyntheticPlaceholder = str_starts_with($c->api_event_key ?? '', 'placeholder-');
+                        $bothTbd = $tbdId && $c->player1_id === $tbdId && $c->player2_id === $tbdId;
+                        if ($isSyntheticPlaceholder && $bothTbd) {
+                            $existing = $c;
+                            break;
+                        }
+                    }
+                }
+                // No "first non-empty free slot" fallback for non-TBD candidates:
+                // overwriting a bracket.tennis row whose players don't match
+                // would scramble the bracket. We skip the fixture instead.
             }
 
             if (!$existing) {

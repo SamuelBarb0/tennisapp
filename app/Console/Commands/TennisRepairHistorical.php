@@ -95,25 +95,24 @@ class TennisRepairHistorical extends Command
                 continue;
             }
 
-            // Clean orphan placeholders: pending matches that survived the sync are
-            // leftovers from the first (broken) ingestion. They were created with
-            // status=pending and scheduled_at=now(), and the real fixtures came in
-            // as separate rows with proper bracket_positions, so deleting the
-            // pendings leaves the real bracket intact.
+            // Clean orphan placeholders: only synthetic placeholder rows (those
+            // ensureBracketPlaceholders() created with TBD players to render
+            // later rounds), NOT bootstrap rows with real players from
+            // bracket.tennis. Otherwise we wipe out R128/R64 brackets that
+            // never matched up with an api-tennis fixture.
             //
-            // Safety check: only delete if at least one finished match was created
-            // by THIS sync. Otherwise the API may simply not expose results for
-            // this tournament — in that case we leave the placeholders so users
-            // can still see something instead of a blank bracket.
+            // We identify true orphans by api_event_key prefix: 'placeholder-%'.
+            // bracket.tennis bootstrap rows use 'bt-bootstrap-%' and stay.
             $finishedAfter = $t->matches()->where('status', 'finished')->count();
             if ($finishedAfter > $finishedBefore) {
                 $deleted = TennisMatch::where('tournament_id', $t->id)
                     ->where('status', 'pending')
+                    ->where('api_event_key', 'LIKE', 'placeholder-%')
                     ->delete();
                 $totals['orphans_deleted'] += $deleted;
-                $this->line("    cleanup: deleted {$deleted} orphan pending matches");
+                $this->line("    cleanup: deleted {$deleted} synthetic placeholder rows");
             } else {
-                $this->line("    cleanup: skipped (no new finished matches — keeping placeholders)");
+                $this->line("    cleanup: skipped (no new finished matches — keeping all rows)");
             }
 
             $totals['tournaments_processed']++;
