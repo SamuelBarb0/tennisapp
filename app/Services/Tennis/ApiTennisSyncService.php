@@ -1155,11 +1155,29 @@ class ApiTennisSyncService
         $slug = Str::slug($name);
         if (!$slug) return $tbd;
 
+        // 1) Exact slug match first — fast path.
         $player = Player::where('slug', $slug)->first();
         if ($player) return $player;
 
-        // Create a new player record. Country comes as ISO-3 (e.g. "ita") from
-        // bracket.tennis flags — Player::getIso2Attribute already handles 3-letter codes.
+        // 2) Fuzzy match by surname + tour. bracket.tennis sends full names
+        //    ("Alexander Zverev") while api-tennis stores them initialized
+        //    ("A. Zverev"). Without this fallback we'd create a duplicate row
+        //    every time the bootstrap runs, leaving the bracket without any
+        //    seed/ranking info (since the rankings sync only updates the
+        //    canonical "A. Zverev" record).
+        $surnameKey = BracketTennisScraper::surnameKey($name);
+        if ($surnameKey !== '') {
+            $candidates = Player::where('category', $tour)->get();
+            foreach ($candidates as $c) {
+                if (BracketTennisScraper::surnameKey($c->name) === $surnameKey) {
+                    return $c;
+                }
+            }
+        }
+
+        // 3) Nothing matched — create a fresh Player row. Country comes as
+        //    ISO-3 (e.g. "ita") from bracket.tennis flags; Player::getIso2Attribute
+        //    already handles 3-letter codes downstream.
         return Player::create([
             'name'             => $name,
             'slug'             => $slug,
