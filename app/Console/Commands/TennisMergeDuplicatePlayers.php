@@ -32,14 +32,19 @@ class TennisMergeDuplicatePlayers extends Command
     {
         $dryRun = (bool) $this->option('dry-run');
 
-        // Group ALL players by (category, surnameKey). Any group with > 1 row
-        // is a candidate for merging.
+        // Group ALL players by (category, surnameKey, firstInitial). Adding the
+        // first initial of the FIRST given name prevents merging siblings or
+        // unrelated players who happen to share a surname:
+        //   - "F. Cerundolo" + "Juan Manuel Cerundolo" → different initials, skip
+        //   - "A. Zverev"   + "Alexander Zverev"      → both 'A', merge
         $groups = [];
         foreach (Player::all() as $p) {
             $cat = $p->category ?: 'UNKNOWN';
             $key = BracketTennisScraper::surnameKey($p->name ?? '');
             if ($key === '') continue;
-            $gid = $cat . '|' . $key;
+            $initial = $this->firstInitial($p->name ?? '');
+            if ($initial === '') continue;
+            $gid = $cat . '|' . $key . '|' . $initial;
             $groups[$gid][] = $p;
         }
 
@@ -108,5 +113,21 @@ class TennisMergeDuplicatePlayers extends Command
         $this->table(array_keys($totals), [array_values($totals)]);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Return the lowercase first letter of the player's first given name.
+     * Handles both initialled forms ("A. Zverev" → 'a') and full forms
+     * ("Alexander Zverev" → 'a'). Returns '' when the name is malformed.
+     */
+    private function firstInitial(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') return '';
+        // ASCII-normalise so accents don't split groups.
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name) ?: $name;
+        $ascii = preg_replace('/[^a-zA-Z\s.-]/', '', $ascii);
+        $ch = mb_substr(ltrim($ascii), 0, 1);
+        return strtolower($ch);
     }
 }
