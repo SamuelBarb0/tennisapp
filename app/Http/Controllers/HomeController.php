@@ -31,9 +31,25 @@ class HomeController extends Controller
         // "Próximos torneos a predecir": the admin opts in via featured_on_home.
         // We exclude finished tournaments so completed events (e.g. Madrid
         // after it ends) stop appearing in the "next up" section.
+        //
+        // We also auto-include the ATP/WTA siblings of any featured tournament
+        // so the admin only has to tick one half of a Grand Slam family — both
+        // halves end up in the collection and groupByFamily() unifies them
+        // into a single ATP+WTA card.
+        $featuredFamilies = Tournament::where('featured_on_home', true)
+            ->whereNotNull('family_slug')
+            ->pluck('family_slug')
+            ->unique()
+            ->all();
+
         $featuredTournaments = Tournament::where('is_active', true)
-            ->where('featured_on_home', true)
             ->where('status', '!=', 'finished')
+            ->where(function ($q) use ($featuredFamilies) {
+                $q->where('featured_on_home', true);
+                if (!empty($featuredFamilies)) {
+                    $q->orWhereIn('family_slug', $featuredFamilies);
+                }
+            })
             ->whereHas('matches')
             ->withCount(['matches as pending_matches_count' => function ($q) {
                 $q->where('status', 'pending');
