@@ -301,40 +301,36 @@ class ApiTennisSyncService
             }
         }
 
-        // If api-tennis hasn't published main-draw fixtures yet but bracket.tennis
-        // already has the draw, bootstrap from BT alone so users can start
-        // predicting ~5-7 days early. The api-tennis scores/winners will overlay
-        // once fixtures appear. We check "main draw" specifically — not just
-        // "any fixtures" — because Grand Slams publish qualifying days before
-        // the main draw, and an empty()-only guard kept us stuck on qualy.
+        // bracket.tennis is the source of truth for bracket structure +
+        // players (including qualifier confirmations as TBDs get filled in).
+        // api-tennis only supplies match results. So we ALWAYS run the BT
+        // bootstrap before processing api-tennis fixtures — the bootstrap is
+        // idempotent: it fills TBD slots with newly-confirmed players and
+        // updates seeds, but never overwrites a real player or a result.
+        $bootstrapped = $this->bootstrapFromBracketTennis($tournament);
+
+        // Detect whether api-tennis has published main-draw fixtures yet.
+        // Grand Slams publish qualifying days before the main draw, so we
+        // explicitly filter qualy out — an empty()-only guard kept us stuck on
+        // qualy in past seasons.
         $mainDrawFixtures = array_filter($allFixtures, function ($f) {
             $isQualy = ($f['event_qualification'] ?? null) === 'True'
                 || ($f['event_qualification'] ?? null) === true;
             return !$isQualy && trim((string) ($f['tournament_round'] ?? '')) !== '';
         });
 
-        // Run the bootstrap when api-tennis hasn't published main-draw fixtures
-        // AND the tournament has no first-round matches yet. We check any of
-        // the possible starting rounds (R128 / R64 / R32 / R16) so a partially-
-        // populated tournament re-runs the bootstrap correctly.
-        $hasAnyFirstRound = $tournament->matches()
-            ->whereIn('round', ['R128', 'R64', 'R32', 'R16'])
-            ->exists();
-
-        if (empty($mainDrawFixtures) && !$hasAnyFirstRound) {
-            $bootstrapped = $this->bootstrapFromBracketTennis($tournament);
-            if ($bootstrapped > 0) {
-                return [
-                    'fixtures'       => count($allFixtures),
-                    'main_draw'      => 0,
-                    'qualy'          => count($allFixtures), // everything we got was qualy
-                    'finished'       => 0,
-                    'scored'         => 0,
-                    'placeholders'   => 0,
-                    'bootstrapped'   => $bootstrapped,
-                ];
-            }
-            return ['fixtures' => count($allFixtures), 'updated' => 0, 'scored' => 0];
+        // If api-tennis has nothing useful yet, we're done — the bootstrap
+        // above already published the bracket from BT for users to predict on.
+        if (empty($mainDrawFixtures)) {
+            return [
+                'fixtures'       => count($allFixtures),
+                'main_draw'      => 0,
+                'qualy'          => count($allFixtures),
+                'finished'       => 0,
+                'scored'         => 0,
+                'placeholders'   => 0,
+                'bootstrapped'   => $bootstrapped,
+            ];
         }
 
         // Wrap into the shape the rest of the loop expects.
@@ -1170,12 +1166,15 @@ class ApiTennisSyncService
     }
 
     /**
-     * Bootstrap the bracket directly from bracket.tennis when api-tennis hasn't
-     * published fixtures yet. Creates 64 R128 matches with players + seeds,
-     * leaving status='pending' and no scores. The next sync (when api-tennis
-     * fixtures arrive) overlays scores and winners on top.
+     * Bootstrap (and continuously refresh) the bracket from bracket.tennis.
+     * bracket.tennis is the source of truth for structure + players —
+     * including qualifier confirmations that replace TBD placeholders as the
+     * tournament progresses. api-tennis only contributes results on top.
      *
-     * Returns the number of matches created.
+     * Idempotent: re-running fills TBD slots with newly-confirmed players but
+     * never overwrites an existing real player or a finished result.
+     *
+     * Returns the number of matches created OR updated.
      */
     private function bootstrapFromBracketTennis(Tournament $tournament): int
     {
@@ -1205,13 +1204,10 @@ class ApiTennisSyncService
             default          => 'QF',
         };
 
-        // Skip if matches already exist (idempotency)
-        if ($tournament->matches()->where('round', $startRound)->exists()) return 0;
-
         $tbd = Player::where('name', 'TBD')->first();
         if (!$tbd) return 0;
 
-        $created = 0;
+        $touched = 0;
         $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
         foreach ($draw as $entry) {
             // Detect BYE slots before resolving players. bracket.tennis emits
@@ -1228,6 +1224,46 @@ class ApiTennisSyncService
             $p2 = $this->resolveBootstrapPlayer($entry['p2'], $entry['p2_country'], $tbd, $tour);
             if (!$p1 || !$p2) continue;
 
+            $bracketPosition = $entry['slot'] + 1; // 1-indexed
+
+            // Look up any existing match at this slot. If one exists we'll
+            // refresh TBD slots in-place instead of creating duplicates.
+            $existing = $tournament->matches()
+                ->where('round', $startRound)
+                ->where('bracket_position', $bracketPosition)
+                ->first();
+
+            if ($existing) {
+                $updates = [];
+
+                // Only fill player1 if it is currently TBD — never overwrite a
+                // real player that api-tennis or a previous sync set.
+                if ($existing->player1_id === $tbd->id && $p1->id !== $tbd->id) {
+                    $updates['player1_id'] = $p1->id;
+                }
+                if ($existing->player2_id === $tbd->id && $p2->id !== $tbd->id) {
+                    $updates['player2_id'] = $p2->id;
+                }
+
+                // Seeds get refreshed whenever bracket.tennis has one, since
+                // it's the authoritative source for seeding.
+                if (array_key_exists('p1_seed', $entry) && $entry['p1_seed'] !== null
+                    && (int) $existing->player1_seed !== (int) $entry['p1_seed']) {
+                    $updates['player1_seed'] = $entry['p1_seed'];
+                }
+                if (array_key_exists('p2_seed', $entry) && $entry['p2_seed'] !== null
+                    && (int) $existing->player2_seed !== (int) $entry['p2_seed']) {
+                    $updates['player2_seed'] = $entry['p2_seed'];
+                }
+
+                if (!empty($updates)) {
+                    $existing->update($updates);
+                    $touched++;
+                }
+                continue;
+            }
+
+            // No existing match — create from scratch.
             // For BYE rows, the real player wins automatically and we mark it
             // as status='bye' so the UI shows "BYE" instead of a fake match.
             $matchAttrs = [
@@ -1237,7 +1273,7 @@ class ApiTennisSyncService
                 'player1_seed'     => $entry['p1_seed'] ?? null,
                 'player2_seed'     => $entry['p2_seed'] ?? null,
                 'round'            => $startRound,
-                'bracket_position' => $entry['slot'] + 1, // 1-indexed
+                'bracket_position' => $bracketPosition,
                 'scheduled_at'     => $tournament->start_date ?? now()->addDays(7),
                 'api_event_key'    => 'bt-bootstrap-' . strtolower($startRound) . '-' . $entry['slot'] . '-' . $tournament->id,
             ];
@@ -1253,14 +1289,14 @@ class ApiTennisSyncService
             }
 
             TennisMatch::create($matchAttrs);
-            $created++;
+            $touched++;
         }
 
         // Generate TBD placeholders for R64..F so the bracket renders complete.
         $this->ensureBracketPlaceholders($tournament);
 
         $tournament->update(['last_synced_at' => now()]);
-        return $created;
+        return $touched;
     }
 
     /**
