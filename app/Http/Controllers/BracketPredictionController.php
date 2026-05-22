@@ -19,13 +19,16 @@ class BracketPredictionController extends Controller
      */
     public function store(Request $request, Tournament $tournament)
     {
-        // Check if predictions are still allowed (before first match starts)
+        // Check if predictions are still allowed. Deadline is 1 minute before
+        // the first match starts (matches the "Cierra: HH:MM" label shown on
+        // the tournament page, so the two stay in lockstep).
         $firstMatch = $tournament->matches()
             ->whereNotIn('status', ['cancelled'])
             ->orderBy('scheduled_at')
             ->first();
 
-        if (!$firstMatch || now()->gte($firstMatch->scheduled_at)) {
+        $deadline = $firstMatch?->scheduled_at?->copy()->subMinute();
+        if (!$firstMatch || now()->gte($deadline)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Las predicciones ya están cerradas. El torneo ya comenzó.',

@@ -333,6 +333,16 @@ class ApiTennisSyncService
             ];
         }
 
+        // Derive the tournament's real start datetime from the earliest
+        // main-draw fixture api-tennis published. This is how the "Cierra:
+        // HH:MM" deadline gets a precise value — api-tennis usually publishes
+        // event_time (HH:MM in the tournament's local timezone) for day-1
+        // matches 24-72h before the tournament starts. The bootstrap rows we
+        // created earlier all point to tournament.start_date for their
+        // scheduled_at, so updating start_date cascades to every R128 slot
+        // that doesn't have its own api-tennis fixture yet.
+        $this->refreshTournamentStartDate($tournament, $mainDrawFixtures);
+
         // Wrap into the shape the rest of the loop expects.
         $resp = ['result' => array_values($allFixtures)];
 
@@ -409,7 +419,7 @@ class ApiTennisSyncService
                 'status_note'  => $statusNote,
                 'winner_id'    => $winnerId,
                 'score'        => $this->formatScore($f),
-                'scheduled_at' => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null),
+                'scheduled_at' => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null, $tournament->timezone ?: 'America/Bogota'),
             ];
 
             // For "qualifier upgrade" cases — when bracket.tennis had this slot
@@ -549,6 +559,22 @@ class ApiTennisSyncService
             $this->rebuildBracketPositions($tournament);
         }
 
+        // Apply any manual badge overrides on top of what BT gave us. This
+        // covers cases where the official tournament site shows a badge that
+        // bracket.tennis left out (e.g. RG 2026 showing T. Rakotomanga as WC
+        // while BT left her badge blank).
+        $this->applySeedOverrides($tournament);
+
+        // Repair user predictions that got out of sync with the (now updated)
+        // bracket. Two things this fixes automatically:
+        //   - "Qualifier / LL" picks get promoted to the real player once BT
+        //     confirms them.
+        //   - Picks that were anchored to a position get migrated when the
+        //     scraper reorders the bracket (Roland Garros 2026 incident:
+        //     ~half of one user's R128 picks moved one slot when the
+        //     scraped order replaced the bootstrap order).
+        app(PredictionRealigner::class)->realign($tournament);
+
         // Fill in placeholder matches for later rounds so the bracket renders
         // complete (Quarter-finals / Semis / Final) even before the API
         // publishes those fixtures.
@@ -623,6 +649,105 @@ class ApiTennisSyncService
      *
      * Falls back to the player-progression inference if the scrape fails.
      */
+
+    /**
+     * Pick the earliest main-draw fixture from api-tennis and write its
+     * date+time to tournament.start_date. This is the source of truth for
+     * "when does the tournament start" — and by extension for the
+     * predictions deadline shown in the UI ("Cierra: HH:MM").
+     *
+     * api-tennis publishes event_time (HH:MM, local tournament time) for
+     * day-1 matches 24-72h before the tournament starts. Until then, we keep
+     * whatever start_date the catalog sync wrote (date with 00:00 time).
+     *
+     * Idempotent: re-runs every sync; only writes when the derived value
+     * actually changes.
+     */
+    private function refreshTournamentStartDate(Tournament $tournament, array $mainDrawFixtures): void
+    {
+        if (empty($mainDrawFixtures)) return;
+
+        // Find the earliest fixture that has both a date AND a non-empty
+        // time. Fixtures with only a date and no time get filtered out — we
+        // only commit a start_date update when api-tennis is actually giving
+        // us hour-level precision.
+        $earliest = null;
+        foreach ($mainDrawFixtures as $f) {
+            $date = trim((string) ($f['event_date'] ?? ''));
+            $time = trim((string) ($f['event_time'] ?? ''));
+            if ($date === '' || $time === '') continue;
+            $combined = $date . ' ' . $time;
+            if ($earliest === null || strcmp($combined, $earliest) < 0) {
+                $earliest = $combined;
+            }
+        }
+
+        if ($earliest === null) return;
+
+        // api-tennis returns event_time as a wall-clock in the tournament's
+        // local timezone (e.g. "11:00" for Roland Garros means 11:00 Paris).
+        // We convert to UTC using the tournament's timezone column so that
+        // when the frontend renders ->bogota() it lands at the right hour.
+        // Tournaments default to America/Bogota if no venue timezone is set,
+        // which is correct for the no-conversion case.
+        $tz = $tournament->timezone ?: 'America/Bogota';
+        try {
+            $newStart = \Carbon\Carbon::parse($earliest, $tz)->setTimezone('UTC');
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        if ($tournament->start_date && $tournament->start_date->equalTo($newStart)) {
+            return;
+        }
+
+        $oldStart = $tournament->start_date;
+        $tournament->update(['start_date' => $newStart]);
+
+        // Cascade the change to bootstrap rows that were anchored to the
+        // OLD start_date. We deliberately don't touch rows with their own
+        // api_event_key from api-tennis — those carry per-match times that
+        // are already correct.
+        if ($oldStart) {
+            $tournament->matches()
+                ->where('scheduled_at', $oldStart)
+                ->where('api_event_key', 'like', 'bt-bootstrap-%')
+                ->update(['scheduled_at' => $newStart]);
+        }
+    }
+
+    /**
+     * Apply any (tournament_id, player_id, badge) overrides on top of the
+     * seeds the scraper assigned. Used when bracket.tennis omits a badge
+     * the official tournament site confirms (WC, Q, LL, PR, SE) or to
+     * correct a wrong seed.
+     */
+    private function applySeedOverrides(Tournament $tournament): void
+    {
+        $overrides = \App\Models\PlayerSeedOverride::where('tournament_id', $tournament->id)->get();
+        if ($overrides->isEmpty()) return;
+
+        foreach ($overrides as $ov) {
+            $matches = $tournament->matches()
+                ->where(function ($q) use ($ov) {
+                    $q->where('player1_id', $ov->player_id)
+                      ->orWhere('player2_id', $ov->player_id);
+                })
+                ->get();
+
+            foreach ($matches as $m) {
+                $updates = [];
+                if ($m->player1_id === $ov->player_id && $m->player1_seed !== $ov->badge) {
+                    $updates['player1_seed'] = $ov->badge;
+                }
+                if ($m->player2_id === $ov->player_id && $m->player2_seed !== $ov->badge) {
+                    $updates['player2_seed'] = $ov->badge;
+                }
+                if ($updates) $m->update($updates);
+            }
+        }
+    }
+
     private function reorderBracketFromScraper(Tournament $tournament): void
     {
         $slug = $tournament->tennisexplorer_slug;
@@ -1765,12 +1890,14 @@ class ApiTennisSyncService
             ->max('bracket_position') + 1 ?? 1;
     }
 
-    private function parseDateTime(?string $date, ?string $time): ?Carbon
+    private function parseDateTime(?string $date, ?string $time, string $tz = 'UTC'): ?Carbon
     {
         if (!$date) return null;
         try {
             $stamp = $time ? "{$date} {$time}" : $date;
-            return Carbon::parse($stamp);
+            // Interpret the wall-clock string in the venue timezone, then
+            // store as UTC. The display layer converts to Bogotá downstream.
+            return Carbon::parse($stamp, $tz)->setTimezone('UTC');
         } catch (\Throwable) {
             return null;
         }

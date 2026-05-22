@@ -216,16 +216,22 @@ class TournamentController extends Controller
         // regardless of what individual match scheduled_at values say — otherwise a
         // bad `scheduled_at` (e.g. NULL or a future-looking value left by a sync glitch)
         // can make a long-past tournament look like it's still open.
+        //
+        // The deadline is 1 minute BEFORE the first match starts, per client
+        // requirement ("un minuto antes de que inicie el primer partido del
+        // torneo"). This gives the user a clear visual buffer ("Cierra 03:59"
+        // when the first match is at 04:00) and avoids the awkward case where
+        // the cutoff and the match start at the exact same minute.
         $firstMatch = $tournament->matches()
             ->whereNotIn('status', ['cancelled'])
             ->whereNotNull('scheduled_at')
             ->orderBy('scheduled_at')
             ->first();
         $isFinished       = $tournament->status === 'finished';
+        $lockDate         = $isFinished ? null : $firstMatch?->scheduled_at?->copy()->subMinute();
         $predictionsLocked = $isFinished
             || !$firstMatch
-            || now()->gte($firstMatch->scheduled_at);
-        $lockDate = $isFinished ? null : $firstMatch?->scheduled_at;
+            || now()->gte($lockDate);
 
         // Bracket predictions for the viewing user (self or another user's, if requested)
         $userBracketPicks = collect();

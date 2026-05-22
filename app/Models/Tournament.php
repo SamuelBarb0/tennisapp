@@ -11,7 +11,7 @@ class Tournament extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'slug', 'family_slug', 'type', 'location', 'city', 'country', 'surface',
+        'name', 'slug', 'family_slug', 'type', 'location', 'city', 'country', 'surface', 'timezone',
         'start_date', 'end_date', 'is_premium', 'price', 'is_active', 'featured_on_home', 'image',
         'api_tournament_key', 'api_event_type_key', 'season', 'status', 'last_synced_at',
         'matchstat_season_id', 'matchstat_tournament_id', 'tennisexplorer_slug',
