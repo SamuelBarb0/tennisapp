@@ -15,7 +15,7 @@
         <div class="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm fade-in" style="animation-delay: {{ $loop->index * 0.05 }}s"
              x-data="{ selected: null }">
             <div class="text-xs text-gray-400 mb-4 flex items-center justify-between">
-                <span>{{ $match->round }} &middot; {{ $match->scheduled_at->bogota()->format('d M, H:i') }}</span>
+                <span>{{ $match->round }} &middot; {{ $match->scheduled_at->bogota()->format('d M, h:i A') }}</span>
                 <span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">Pendiente</span>
             </div>
             <div class="grid grid-cols-2 gap-4">

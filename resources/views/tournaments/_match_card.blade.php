@@ -133,7 +133,7 @@
         {{-- Date for pending --}}
         @if($isPending)
         <div class="text-center py-0.5 bg-gray-50 border-t border-gray-100">
-            <span class="text-[8px] text-gray-400">{{ $match->scheduled_at->bogota()->format('d M, H:i') }}</span>
+            <span class="text-[8px] text-gray-400">{{ $match->scheduled_at->bogota()->format('d M, h:i A') }}</span>
         </div>
         @endif
     </div>
