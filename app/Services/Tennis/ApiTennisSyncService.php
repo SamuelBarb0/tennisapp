@@ -647,41 +647,49 @@ class ApiTennisSyncService
             return;
         }
 
-        // 1) Build (surname + first-name initial) → R128 slot map from the
-        //    scraped draw. We MUST include the first-name initial in the key
-        //    or sibling players who share a surname (Francisco vs Juan Manuel
-        //    Cerundolo, Emerson vs Francesca Jones, etc.) get the same seed
-        //    applied to both — exactly the bug that produced "J.M. Cerundolo
-        //    seed=25" in Roland Garros 2026.
-        $playerKeyer = function (string $name): string {
-            $surname = BracketTennisScraper::surnameKey($name);
-            $initial = $this->firstNameInitial($name);
-            return ($surname === '' || $initial === '') ? '' : ($surname . '|' . $initial);
-        };
-
-        $surnameToFirstSlot = [];
-        $surnameToSeed = [];
-        $surnameToCountry = [];
+        // 1) Index every player BT showed in R128 by (surname, full-first-name-from-BT).
+        //    Later we'll look up DB players by surname and compare the DB's
+        //    first-name prefix against the BT entries' full first names —
+        //    this handles all three problem cases uniformly:
+        //      - "F. Cerundolo"  (DB prefix "f")    matches "Francisco"  not "Juan"
+        //      - "J.M. Cerundolo" (DB prefix "j")   matches "Juan Manuel"
+        //      - "Xin. Wang"     (DB prefix "xin")  matches "Xinyu"      not "Xiyu"
+        //      - "Xiy. Wang"     (DB prefix "xiy")  matches "Xiyu"       not "Xinyu"
+        //    Key is (surname → list of [first_name_lower, seed, country, slot]).
+        $btIndex = [];
         foreach ($draw as $entry) {
             foreach (['p1', 'p2'] as $side) {
                 $name = $entry[$side];
                 if (!$name || strcasecmp($name, 'Bye') === 0) continue;
-                $key = $playerKeyer($name);
-                if ($key === '') continue;
-                if (!isset($surnameToFirstSlot[$key])) {
-                    $expandedPos = ($entry['slot'] * 2) + ($side === 'p2' ? 1 : 0);
-                    $surnameToFirstSlot[$key] = $expandedPos;
-                }
-                $seedTag = $entry[$side . '_seed'] ?? null;
-                if ($seedTag !== null && !isset($surnameToSeed[$key])) {
-                    $surnameToSeed[$key] = $seedTag;
-                }
-                $countryTag = $entry[$side . '_country'] ?? null;
-                if ($countryTag && !isset($surnameToCountry[$key])) {
-                    $surnameToCountry[$key] = $countryTag;
-                }
+                $surname = BracketTennisScraper::surnameKey($name);
+                $first   = $this->firstNamePrefix($name);
+                if ($surname === '' || $first === '') continue;
+                $btIndex[$surname][] = [
+                    'first'   => $first,
+                    'seed'    => $entry[$side . '_seed'] ?? null,
+                    'country' => $entry[$side . '_country'] ?? null,
+                    'slot'    => ($entry['slot'] * 2) + ($side === 'p2' ? 1 : 0),
+                ];
             }
         }
+
+        // Find the BT row that matches a DB player name. Compares the DB's
+        // first-name prefix against each BT entry sharing the surname: the
+        // BT first name must start with the DB prefix (e.g. "francisco"
+        // starts with "f", "xinyu" starts with "xin"). If exactly one matches,
+        // return it; ambiguous matches return null so we don't apply the
+        // wrong seed.
+        $resolveBtRow = function (string $dbName) use (&$btIndex): ?array {
+            $surname = BracketTennisScraper::surnameKey($dbName);
+            if ($surname === '' || !isset($btIndex[$surname])) return null;
+            $dbPrefix = $this->firstNamePrefix($dbName);
+            if ($dbPrefix === '') return null;
+            $hits = array_values(array_filter(
+                $btIndex[$surname],
+                fn($row) => str_starts_with($row['first'], $dbPrefix),
+            ));
+            return count($hits) === 1 ? $hits[0] : null;
+        };
 
         // Apply seeds to every match (winners keep their seed throughout the
         // bracket). Also patch missing player country/flag from bracket.tennis
@@ -696,23 +704,23 @@ class ApiTennisSyncService
             foreach (['player1' => 'player1_seed', 'player2' => 'player2_seed'] as $rel => $col) {
                 $p = $m->{$rel};
                 if (!$p || $p->name === 'TBD') continue;
-                $sk = $playerKeyer($p->name);
-                if ($sk === '') continue;
+                $row = $resolveBtRow($p->name);
+                if ($row === null) continue;
 
-                if (isset($surnameToSeed[$sk])) {
+                if ($row['seed'] !== null) {
                     // Scraper has a seed for this exact player → apply it.
-                    if ($m->$col !== $surnameToSeed[$sk]) {
-                        $updates[$col] = $surnameToSeed[$sk];
+                    if ($m->$col !== $row['seed']) {
+                        $updates[$col] = $row['seed'];
                     }
-                } elseif (isset($surnameToFirstSlot[$sk]) && $m->round === 'R128' && $m->$col !== null) {
+                } elseif ($m->round === 'R128' && $m->$col !== null) {
                     // Scraper saw this player in R128 but WITHOUT a seed →
                     // wipe any stale seed in our DB (sibling confusion, etc.).
                     $updates[$col] = null;
                 }
 
                 // Backfill country from BT if missing or "Unknown"
-                if (isset($surnameToCountry[$sk]) && (!$p->nationality_code || $p->country === 'Unknown' || $p->iso2 === 'un')) {
-                    $iso3 = strtoupper($surnameToCountry[$sk]);
+                if ($row['country'] && (!$p->nationality_code || $p->country === 'Unknown' || $p->iso2 === 'un')) {
+                    $iso3 = strtoupper($row['country']);
                     $p->update(['nationality_code' => $iso3, 'country' => $p->country === 'Unknown' || !$p->country ? $iso3 : $p->country]);
                 }
             }
@@ -720,29 +728,35 @@ class ApiTennisSyncService
         }
 
         // For seeded players who got a bye in R128 (no real match there), make
-        // sure their seed is also exposed on the Player row so any view that
-        // falls back to `player.ranking` for a BYE card can prefer the seed.
-        // We store the seed in a transient attribute that views can read.
-        foreach ($surnameToSeed as $surname => $seed) {
-            if (!is_numeric($seed)) continue; // Q/WC/LL handled per-match
-            $player = Player::all()->first(fn($p) => BracketTennisScraper::surnameKey($p->name) === $surname);
-            if (!$player) continue;
-            // We only update if the player has no seed-bound match in R128
-            // (i.e. they had a bye and skip straight to R64).
-            $hasR128 = $tournament->matches()
-                ->where('round', 'R128')
-                ->where(function ($q) use ($player) {
-                    $q->where('player1_id', $player->id)
-                      ->orWhere('player2_id', $player->id);
-                })
-                ->exists();
-            if (!$hasR128) {
-                // Apply seed to any BYE-status match where this player is alone
-                // (e.g. Kalinskaya having a bye represented as a status=bye row).
-                $tournament->matches()
-                    ->where('status', 'bye')
-                    ->where('player1_id', $player->id)
-                    ->update(['player1_seed' => $seed]);
+        // sure their seed gets exposed on the BYE-status row so views fall
+        // back correctly. We walk the BT index and look up each (surname,
+        // first-name) pair against the DB.
+        foreach ($btIndex as $surname => $rows) {
+            foreach ($rows as $row) {
+                if (!is_numeric($row['seed'])) continue; // Q/WC/LL handled per-match
+                // Find the unique DB player matching this BT entry.
+                $candidates = Player::where('name', 'like', '%' . substr($surname, 0, 4) . '%')
+                    ->get()
+                    ->filter(fn($p) => BracketTennisScraper::surnameKey($p->name) === $surname);
+                $player = $candidates->first(function ($p) use ($row) {
+                    $pref = $this->firstNamePrefix($p->name);
+                    return $pref !== '' && str_starts_with($row['first'], $pref);
+                });
+                if (!$player) continue;
+
+                $hasR128 = $tournament->matches()
+                    ->where('round', 'R128')
+                    ->where(function ($q) use ($player) {
+                        $q->where('player1_id', $player->id)
+                          ->orWhere('player2_id', $player->id);
+                    })
+                    ->exists();
+                if (!$hasR128) {
+                    $tournament->matches()
+                        ->where('status', 'bye')
+                        ->where('player1_id', $player->id)
+                        ->update(['player1_seed' => $row['seed']]);
+                }
             }
         }
 
@@ -1334,21 +1348,45 @@ class ApiTennisSyncService
         $player = Player::where('slug', $slug)->first();
         if ($player) return $player;
 
-        // 2) Fuzzy match by surname + first-name initial + tour. bracket.tennis
+        // 2) Fuzzy match by surname + first-name prefix + tour. bracket.tennis
         //    sends full names ("Alexander Zverev") while api-tennis stores
-        //    them initialized ("A. Zverev"). We need to match those without
-        //    confusing sibling players who share a surname (Emerson vs
-        //    Francesca Jones, Francisco vs Juan Manuel Cerundolo, etc.) — so
-        //    we also compare the first character of the given name.
+        //    them initialized ("A. Zverev" or sometimes "Xin. Wang"). We need
+        //    to match those without confusing same-tour players who share a
+        //    surname:
+        //      - Cerundolo brothers (Francisco / Juan Manuel) → distinguished by initial
+        //      - Jones sisters (Emerson / Francesca)         → distinguished by initial
+        //      - Wang doubles (Xinyu / Xiyu)                 → SAME initial, need >=3 chars
+        //    Strategy: progressively widen the first-name prefix until we hit a
+        //    unique match. If the api-tennis name only has an initial available
+        //    ("X. Wang"), we fall back to single-char matching.
         $surnameKey = BracketTennisScraper::surnameKey($name);
-        $firstInitial = $this->firstNameInitial($name);
-        if ($surnameKey !== '' && $firstInitial !== '') {
-            $candidates = Player::where('category', $tour)->get();
-            foreach ($candidates as $c) {
-                $candidateSurname = BracketTennisScraper::surnameKey($c->name);
-                $candidateInitial = $this->firstNameInitial($c->name ?? '');
-                if ($candidateSurname === $surnameKey && $candidateInitial === $firstInitial) {
-                    return $c;
+        $firstPrefix = $this->firstNamePrefix($name);
+        if ($surnameKey !== '' && $firstPrefix !== '') {
+            $candidates = Player::where('category', $tour)
+                ->where('name', 'like', '%' . substr($surnameKey, 0, 4) . '%')
+                ->get()
+                ->filter(fn($c) => BracketTennisScraper::surnameKey($c->name) === $surnameKey);
+
+            if ($candidates->count() === 1) {
+                return $candidates->first();
+            }
+
+            if ($candidates->count() > 1) {
+                // Multiple players share this surname. Try the longest common
+                // prefix match: start wide and shrink. This handles "Xinyu"
+                // matching "Xin. Wang" (3 chars common) while still letting
+                // "Xiyu" match "Xiy. Wang".
+                $btPrefix = strtolower($firstPrefix);
+                for ($len = min(strlen($btPrefix), 5); $len >= 1; $len--) {
+                    $needle = substr($btPrefix, 0, $len);
+                    $hits = $candidates->filter(function ($c) use ($needle) {
+                        $candidatePrefix = strtolower($this->firstNamePrefix($c->name ?? ''));
+                        return $candidatePrefix !== '' && str_starts_with($needle, $candidatePrefix);
+                    });
+                    if ($hits->count() === 1) {
+                        return $hits->first();
+                    }
+                    if ($hits->count() === 0) break;
                 }
             }
         }
@@ -1366,18 +1404,26 @@ class ApiTennisSyncService
     }
 
     /**
-     * Lowercase first letter of the given name. Handles both initialled
-     * ("A. Zverev" → 'a') and full names ("Alexander Zverev" → 'a').
-     * Used to disambiguate siblings during fuzzy player matching.
+     * Lowercase prefix of the player's first name. Handles three input shapes:
+     *   - Full name        ("Alexander Zverev"  → 'alexander')
+     *   - Standard initial ("A. Zverev"         → 'a')
+     *   - Extended initial ("Xin. Wang"         → 'xin')
+     *
+     * Used to disambiguate same-surname players during fuzzy matching. The
+     * caller progressively narrows the prefix when more than one candidate
+     * remains, so longer prefixes only get compared when there is real
+     * ambiguity to resolve.
      */
-    private function firstNameInitial(string $name): string
+    private function firstNamePrefix(string $name): string
     {
         $name = trim($name);
         if ($name === '') return '';
         $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name) ?: $name;
         $ascii = preg_replace('/[^a-zA-Z\s.-]/', '', $ascii);
-        $ch = mb_substr(ltrim($ascii), 0, 1);
-        return strtolower($ch);
+        $tokens = preg_split('/\s+/', ltrim($ascii));
+        $first = strtolower($tokens[0] ?? '');
+        // Drop the trailing "." from initials like "Xin." or "A.".
+        return rtrim($first, '.');
     }
 
     /** Loop syncTournamentLive over every active tournament with an api_tournament_key. */
