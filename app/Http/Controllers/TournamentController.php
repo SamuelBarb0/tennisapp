@@ -280,7 +280,12 @@ class TournamentController extends Controller
             $bracketFillable = $totalSlots > 0 && $hasReal === $totalSlots;
         }
 
-        // Build bracket structure: for each round, list of matchups with bracket positions
+        // Build bracket structure: for each round, list of matchups with bracket positions.
+        // We also expose each player's TOURNAMENT seed (player1_seed / player2_seed
+        // from the match they actually appear in) so the JS propagation code in
+        // tournaments/show.blade.php can render the seed when the user picks
+        // a winner — instead of falling back to the world ranking, which would
+        // shift the displayed number between rounds.
         $roundOrder = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
         $bracketData = [];
         foreach ($roundOrder as $round) {
@@ -296,6 +301,7 @@ class TournamentController extends Controller
                         'name' => $match->player1->name,
                         'flag' => $match->player1->flag_url,
                         'ranking' => $match->player1->ranking,
+                        'seed' => $match->player1_seed,
                         'nationality' => $match->player1->nationality_code,
                     ] : null,
                     'player2' => $match->player2 ? [
@@ -303,6 +309,7 @@ class TournamentController extends Controller
                         'name' => $match->player2->name,
                         'flag' => $match->player2->flag_url,
                         'ranking' => $match->player2->ranking,
+                        'seed' => $match->player2_seed,
                         'nationality' => $match->player2->nationality_code,
                     ] : null,
                     'winner_id' => $match->winner_id,

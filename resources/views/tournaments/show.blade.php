@@ -206,12 +206,18 @@
 {{-- ═══════ HERO ═══════ --}}
 @php
     $type = $tournament->type ?? '';
-    $isGrandSlam = $type === 'GrandSlam';
+    // "Grand Slam" appears in three forms across the dataset:
+    //   - "ATP Grand Slam" (Australian Open ATP, Roland Garros ATP, ...)
+    //   - "WTA Grand Slam"
+    //   - "GrandSlam" (legacy short code from earlier seeds)
+    // We need to recognise all three so the men's-final-best-of-5 rule fires.
+    $isGrandSlam = $type === 'GrandSlam' || str_contains($type, 'Grand Slam');
     $isATP       = str_starts_with($type, 'ATP');
     $isWTA       = str_starts_with($type, 'WTA');
 
-    // Max sets for the final: Grand Slams men's = best of 5, everything else = best of 3.
-    // Grand Slam women's also play best of 3, so we check for WTA Grand Slams via category or tour.
+    // Max sets for the final:
+    //   - Grand Slam men's → best of 5
+    //   - Grand Slam women's & all other tournaments → best of 3
     $category = strtolower($tournament->category ?? $tournament->tour ?? '');
     $isWomens = $isWTA || str_contains($category, 'wta') || str_contains($category, 'women') || str_contains($category, 'femenin');
     $finalMaxSets = ($isGrandSlam && !$isWomens) ? 5 : 3;
@@ -919,7 +925,7 @@
                                      x-on:click="if(!locked && getPropagated('{{ $prevRound }}', {{ $feedPos1 }})) pickWinner('{{ $round }}', {{ $position }}, getPropagated('{{ $prevRound }}', {{ $feedPos1 }}))">
                                     <template x-if="getPropagated('{{ $prevRound }}', {{ $feedPos1 }})">
                                         <span class="flex items-center gap-1.5 flex-1 min-w-0">
-                                            <span class="text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0" x-text="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos1 }}))?.ranking || ''"></span>
+                                            <span class="text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0" x-text="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos1 }}))?.seed || ''"></span>
                                             <img :src="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos1 }}))?.flag" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0">
                                             <span class="font-semibold truncate text-tc-primary/60 text-[10px]" x-text="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos1 }}))?.name?.toUpperCase()"></span>
                                         </span>
@@ -993,7 +999,7 @@
                                      x-on:click="if(!locked && getPropagated('{{ $prevRound }}', {{ $feedPos2 }})) pickWinner('{{ $round }}', {{ $position }}, getPropagated('{{ $prevRound }}', {{ $feedPos2 }}))">
                                     <template x-if="getPropagated('{{ $prevRound }}', {{ $feedPos2 }})">
                                         <span class="flex items-center gap-1.5 flex-1 min-w-0">
-                                            <span class="text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0" x-text="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos2 }}))?.ranking || ''"></span>
+                                            <span class="text-[8.5px] font-mono font-black text-tc-primary w-3 text-right shrink-0" x-text="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos2 }}))?.seed || ''"></span>
                                             <img :src="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos2 }}))?.flag" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0">
                                             <span class="font-semibold truncate text-tc-primary/60 text-[10px]" x-text="getPlayerInfo(getPropagated('{{ $prevRound }}', {{ $feedPos2 }}))?.name?.toUpperCase()"></span>
                                         </span>
@@ -1423,7 +1429,31 @@
 function bracketApp() {
     return {
         picks: @json($userPicksJs ?? []),
-        players: @json(collect($bracketData)->flatten(1)->flatMap(fn($m) => collect([$m['player1'], $m['player2']])->filter())->unique('id')->keyBy('id')->toArray()),
+        @php
+            // Build playerId → info map. When the same player appears in multiple
+            // rounds (winners propagate), keep the EARLIEST round's `seed` so
+            // we always show the tournament seed (assigned at R128) rather than
+            // whichever seed slot happened to come last.
+            $playersMap = [];
+            foreach (['R128','R64','R32','R16','QF','SF','F'] as $r) {
+                foreach (($bracketData[$r] ?? []) as $m) {
+                    foreach (['player1','player2'] as $side) {
+                        $p = $m[$side] ?? null;
+                        if (!$p || !isset($p['id'])) continue;
+                        if (isset($playersMap[$p['id']])) {
+                            // Keep first-seen seed if non-empty; otherwise let
+                            // the later round fill it in (rare).
+                            if (empty($playersMap[$p['id']]['seed']) && !empty($p['seed'])) {
+                                $playersMap[$p['id']]['seed'] = $p['seed'];
+                            }
+                            continue;
+                        }
+                        $playersMap[$p['id']] = $p;
+                    }
+                }
+            }
+        @endphp
+        players: @json($playersMap),
         locked: {{ ($predictionsLocked || !$bracketFillable || $viewingOtherUser) ? 'true' : 'false' }},
         finalScore: @json($userFinalScore ?? ''),
         finalMaxSets: {{ $finalMaxSets }},

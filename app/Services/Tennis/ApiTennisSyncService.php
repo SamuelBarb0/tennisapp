@@ -403,16 +403,29 @@ class ApiTennisSyncService
             // The LOSING player gets the tag (ret./wo/etc.) next to their name.
             $statusNote = $this->computeStatusNote($f, $winnerSide);
 
-            $attrs = [
-                'tournament_id'  => $tournament->id,
-                'player1_id'     => $player1?->id,
-                'player2_id'     => $player2?->id,
-                'round'          => $round,
-                'status'         => $status,
-                'status_note'    => $statusNote,
-                'winner_id'      => $winnerId,
-                'score'          => $this->formatScore($f),
-                'scheduled_at'   => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null),
+            // Results-only payload. api-tennis ONLY contributes scores, winners,
+            // status and scheduling — never the player_id, seed, round, or
+            // bracket_position. Those belong to bracket.tennis (the structural
+            // authority) and changing them here is what historically scrambled
+            // the bracket (sibling player confusion, ghost matches, etc.).
+            $resultAttrs = [
+                'status'       => $status,
+                'status_note'  => $statusNote,
+                'winner_id'    => $winnerId,
+                'score'        => $this->formatScore($f),
+                'scheduled_at' => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null),
+            ];
+
+            // For "qualifier upgrade" cases — when bracket.tennis had this slot
+            // as "real seed vs Qualifier/LL" and api-tennis now confirms a
+            // specific qualifier — we DO allow filling in the missing player.
+            // Only fills NULLs / TBD; never overwrites a real player.
+            $tbdId = Player::where('name', 'TBD')->value('id');
+            $playerFillAttrs = [
+                'player1_id'   => $player1?->id,
+                'player2_id'   => $player2?->id,
+                'round'        => $round,
+                'tournament_id'=> $tournament->id,
             ];
 
             // ─── bracket.tennis is the source of truth for bracket structure ───
@@ -489,17 +502,32 @@ class ApiTennisSyncService
             }
 
             $wasFinished = $existing->status === 'finished';
-            // Adopt the real api_event_key when upgrading a placeholder slot.
             $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
                 || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
+
+            // Build the actual update payload. Start with results-only fields.
+            $updateAttrs = $resultAttrs;
+
+            // Adopt the real api_event_key when upgrading a placeholder slot,
+            // so future syncs match by event_key instead of falling back to
+            // player matching.
             if ($isPlaceholder) {
-                $attrs['api_event_key'] = (string) $eventKey;
+                $updateAttrs['api_event_key'] = (string) $eventKey;
             }
-            // CRITICAL: never let api-tennis touch bracket_position. The bracket
-            // layout is owned by bracket.tennis; reorderBracketFromScraper()
-            // is responsible for the canonical positions.
-            unset($attrs['bracket_position']);
-            $existing->update($attrs);
+
+            // PLAYER FILL — only when the existing slot has TBD on one or
+            // both sides. We never overwrite a real bracket.tennis player,
+            // because that's how sibling-confusion / wrong-WC bugs happen.
+            // For qualifier slots ("real seed vs Qualifier/LL placeholder")
+            // this fills in the qualifier without touching the seeded side.
+            if ($tbdId && $existing->player1_id === $tbdId && $player1) {
+                $updateAttrs['player1_id'] = $player1->id;
+            }
+            if ($tbdId && $existing->player2_id === $tbdId && $player2) {
+                $updateAttrs['player2_id'] = $player2->id;
+            }
+
+            $existing->update($updateAttrs);
             if (!$wasFinished && $status === 'finished') $newlyFinished[] = $existing->id;
             $updated++;
         }
@@ -1227,17 +1255,20 @@ class ApiTennisSyncService
         $player = Player::where('slug', $slug)->first();
         if ($player) return $player;
 
-        // 2) Fuzzy match by surname + tour. bracket.tennis sends full names
-        //    ("Alexander Zverev") while api-tennis stores them initialized
-        //    ("A. Zverev"). Without this fallback we'd create a duplicate row
-        //    every time the bootstrap runs, leaving the bracket without any
-        //    seed/ranking info (since the rankings sync only updates the
-        //    canonical "A. Zverev" record).
+        // 2) Fuzzy match by surname + first-name initial + tour. bracket.tennis
+        //    sends full names ("Alexander Zverev") while api-tennis stores
+        //    them initialized ("A. Zverev"). We need to match those without
+        //    confusing sibling players who share a surname (Emerson vs
+        //    Francesca Jones, Francisco vs Juan Manuel Cerundolo, etc.) — so
+        //    we also compare the first character of the given name.
         $surnameKey = BracketTennisScraper::surnameKey($name);
-        if ($surnameKey !== '') {
+        $firstInitial = $this->firstNameInitial($name);
+        if ($surnameKey !== '' && $firstInitial !== '') {
             $candidates = Player::where('category', $tour)->get();
             foreach ($candidates as $c) {
-                if (BracketTennisScraper::surnameKey($c->name) === $surnameKey) {
+                $candidateSurname = BracketTennisScraper::surnameKey($c->name);
+                $candidateInitial = $this->firstNameInitial($c->name ?? '');
+                if ($candidateSurname === $surnameKey && $candidateInitial === $firstInitial) {
                     return $c;
                 }
             }
@@ -1253,6 +1284,21 @@ class ApiTennisSyncService
             'country'          => $country ? strtoupper($country) : 'Unknown',
             'nationality_code' => $country ?: null,
         ]);
+    }
+
+    /**
+     * Lowercase first letter of the given name. Handles both initialled
+     * ("A. Zverev" → 'a') and full names ("Alexander Zverev" → 'a').
+     * Used to disambiguate siblings during fuzzy player matching.
+     */
+    private function firstNameInitial(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') return '';
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name) ?: $name;
+        $ascii = preg_replace('/[^a-zA-Z\s.-]/', '', $ascii);
+        $ch = mb_substr(ltrim($ascii), 0, 1);
+        return strtolower($ch);
     }
 
     /** Loop syncTournamentLive over every active tournament with an api_tournament_key. */
