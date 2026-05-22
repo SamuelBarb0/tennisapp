@@ -1263,18 +1263,28 @@ class ApiTennisSyncService
             if ($existing) {
                 $updates = [];
 
-                // Only fill a slot if it currently holds a placeholder
-                // (TBD / Qualifier / Qualifier / LL / Lucky Loser). Real
-                // players already in the bracket are never overwritten — this
-                // is what lets bracket.tennis confirm qualifiers as the draw
-                // resolves without clobbering anything api-tennis sent.
+                // A slot can be refilled in two cases:
+                //   (a) it holds a placeholder (TBD / Qualifier / LL / Lucky
+                //       Loser) and BT has confirmed a real player,
+                //   (b) it holds the WRONG sibling — same surname as BT, but
+                //       a different first name. This happens when the old
+                //       single-char fuzzy matcher picked the wrong sibling
+                //       (Xin. Wang appearing in Xiyu Wang's slot, etc.).
+                // Real players that genuinely match BT are never overwritten.
                 $p1IsPlaceholder = in_array($existing->player1_id, $placeholderIds, true);
                 $p2IsPlaceholder = in_array($existing->player2_id, $placeholderIds, true);
 
-                if ($p1IsPlaceholder && !in_array($p1->id, $placeholderIds, true)) {
+                $p1IsWrongSibling = !$p1IsPlaceholder
+                    && $existing->player1
+                    && $this->isWrongSiblingFor($existing->player1, $entry['p1']);
+                $p2IsWrongSibling = !$p2IsPlaceholder
+                    && $existing->player2
+                    && $this->isWrongSiblingFor($existing->player2, $entry['p2']);
+
+                if (($p1IsPlaceholder || $p1IsWrongSibling) && !in_array($p1->id, $placeholderIds, true)) {
                     $updates['player1_id'] = $p1->id;
                 }
-                if ($p2IsPlaceholder && !in_array($p2->id, $placeholderIds, true)) {
+                if (($p2IsPlaceholder || $p2IsWrongSibling) && !in_array($p2->id, $placeholderIds, true)) {
                     $updates['player2_id'] = $p2->id;
                 }
 
@@ -1401,6 +1411,35 @@ class ApiTennisSyncService
             'country'          => $country ? strtoupper($country) : 'Unknown',
             'nationality_code' => $country ?: null,
         ]);
+    }
+
+    /**
+     * Decide whether the Player in a given slot is the WRONG sibling
+     * compared to what bracket.tennis says for that slot.
+     *
+     * Returns true only when:
+     *   - both names share the same surname (so we know we're comparing
+     *     siblings, not unrelated players), AND
+     *   - the DB player's first-name prefix is NOT a prefix-of the BT
+     *     full first name (so "Xin." vs "Xiyu" → wrong, but "F." vs
+     *     "Francisco" → right).
+     *
+     * Returning false when surnames differ means we never overwrite a slot
+     * just because BT shows a totally different person there — that case
+     * is handled by other matching logic (e.g. seed swaps).
+     */
+    private function isWrongSiblingFor(Player $dbPlayer, ?string $btName): bool
+    {
+        if (!$btName || strcasecmp($btName, 'Bye') === 0) return false;
+        $dbSurname = BracketTennisScraper::surnameKey($dbPlayer->name ?? '');
+        $btSurname = BracketTennisScraper::surnameKey($btName);
+        if ($dbSurname === '' || $btSurname === '' || $dbSurname !== $btSurname) {
+            return false;
+        }
+        $dbPrefix = $this->firstNamePrefix($dbPlayer->name ?? '');
+        $btFirst  = $this->firstNamePrefix($btName);
+        if ($dbPrefix === '' || $btFirst === '') return false;
+        return !str_starts_with($btFirst, $dbPrefix);
     }
 
     /**
