@@ -651,9 +651,18 @@ class ApiTennisSyncService
             return;
         }
 
-        // 1) Build surname → R128 slot map from the scraped draw.
-        //    Also keep surname → seed/Q/WC tag AND surname → country (ISO-3)
-        //    so we can patch missing flags from bracket.tennis as fallback.
+        // 1) Build (surname + first-name initial) → R128 slot map from the
+        //    scraped draw. We MUST include the first-name initial in the key
+        //    or sibling players who share a surname (Francisco vs Juan Manuel
+        //    Cerundolo, Emerson vs Francesca Jones, etc.) get the same seed
+        //    applied to both — exactly the bug that produced "J.M. Cerundolo
+        //    seed=25" in Roland Garros 2026.
+        $playerKeyer = function (string $name): string {
+            $surname = BracketTennisScraper::surnameKey($name);
+            $initial = $this->firstNameInitial($name);
+            return ($surname === '' || $initial === '') ? '' : ($surname . '|' . $initial);
+        };
+
         $surnameToFirstSlot = [];
         $surnameToSeed = [];
         $surnameToCountry = [];
@@ -661,7 +670,7 @@ class ApiTennisSyncService
             foreach (['p1', 'p2'] as $side) {
                 $name = $entry[$side];
                 if (!$name || strcasecmp($name, 'Bye') === 0) continue;
-                $key = BracketTennisScraper::surnameKey($name);
+                $key = $playerKeyer($name);
                 if ($key === '') continue;
                 if (!isset($surnameToFirstSlot[$key])) {
                     $expandedPos = ($entry['slot'] * 2) + ($side === 'p2' ? 1 : 0);
@@ -681,15 +690,30 @@ class ApiTennisSyncService
         // Apply seeds to every match (winners keep their seed throughout the
         // bracket). Also patch missing player country/flag from bracket.tennis
         // when the api-tennis data didn't provide it (e.g. Townsend, Kessler).
+        //
+        // CRITICAL: when the scraper showed this player in a R128 match but
+        // WITHOUT a seed, we also CLEAR any stale seed the DB has — that
+        // way a seed accidentally inherited from a sibling (or from a previous
+        // tournament) gets wiped on every sync, not just additively merged.
         foreach ($tournament->matches()->with(['player1', 'player2'])->get() as $m) {
             $updates = [];
             foreach (['player1' => 'player1_seed', 'player2' => 'player2_seed'] as $rel => $col) {
                 $p = $m->{$rel};
                 if (!$p || $p->name === 'TBD') continue;
-                $sk = BracketTennisScraper::surnameKey($p->name);
-                if (isset($surnameToSeed[$sk]) && $m->$col !== $surnameToSeed[$sk]) {
-                    $updates[$col] = $surnameToSeed[$sk];
+                $sk = $playerKeyer($p->name);
+                if ($sk === '') continue;
+
+                if (isset($surnameToSeed[$sk])) {
+                    // Scraper has a seed for this exact player → apply it.
+                    if ($m->$col !== $surnameToSeed[$sk]) {
+                        $updates[$col] = $surnameToSeed[$sk];
+                    }
+                } elseif (isset($surnameToFirstSlot[$sk]) && $m->round === 'R128' && $m->$col !== null) {
+                    // Scraper saw this player in R128 but WITHOUT a seed →
+                    // wipe any stale seed in our DB (sibling confusion, etc.).
+                    $updates[$col] = null;
                 }
+
                 // Backfill country from BT if missing or "Unknown"
                 if (isset($surnameToCountry[$sk]) && (!$p->nationality_code || $p->country === 'Unknown' || $p->iso2 === 'un')) {
                     $iso3 = strtoupper($surnameToCountry[$sk]);
