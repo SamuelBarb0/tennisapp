@@ -1207,6 +1207,19 @@ class ApiTennisSyncService
         $tbd = Player::where('name', 'TBD')->first();
         if (!$tbd) return 0;
 
+        // Any player whose name reads like a placeholder ("Qualifier",
+        // "Qualifier / LL", "LL", "Lucky Loser", "TBD", "Por definir") counts
+        // as a refillable slot — bracket.tennis confirming a real qualifier
+        // should replace those. We resolve the ids once up front so the inner
+        // loop can do a fast in_array check.
+        $placeholderIds = Player::where(function ($q) {
+            $q->where('name', 'TBD')
+              ->orWhere('name', 'like', '%Qualifier%')
+              ->orWhere('name', 'like', '%Lucky Loser%')
+              ->orWhere('name', 'like', '%Por definir%')
+              ->orWhereRaw('LOWER(name) = ?', ['ll']);
+        })->pluck('id')->all();
+
         $touched = 0;
         $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
         foreach ($draw as $entry) {
@@ -1236,12 +1249,18 @@ class ApiTennisSyncService
             if ($existing) {
                 $updates = [];
 
-                // Only fill player1 if it is currently TBD — never overwrite a
-                // real player that api-tennis or a previous sync set.
-                if ($existing->player1_id === $tbd->id && $p1->id !== $tbd->id) {
+                // Only fill a slot if it currently holds a placeholder
+                // (TBD / Qualifier / Qualifier / LL / Lucky Loser). Real
+                // players already in the bracket are never overwritten — this
+                // is what lets bracket.tennis confirm qualifiers as the draw
+                // resolves without clobbering anything api-tennis sent.
+                $p1IsPlaceholder = in_array($existing->player1_id, $placeholderIds, true);
+                $p2IsPlaceholder = in_array($existing->player2_id, $placeholderIds, true);
+
+                if ($p1IsPlaceholder && !in_array($p1->id, $placeholderIds, true)) {
                     $updates['player1_id'] = $p1->id;
                 }
-                if ($existing->player2_id === $tbd->id && $p2->id !== $tbd->id) {
+                if ($p2IsPlaceholder && !in_array($p2->id, $placeholderIds, true)) {
                     $updates['player2_id'] = $p2->id;
                 }
 
