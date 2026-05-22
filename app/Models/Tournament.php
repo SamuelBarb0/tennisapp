@@ -20,8 +20,8 @@ class Tournament extends Model
     protected function casts(): array
     {
         return [
-            'start_date' => 'date',
-            'end_date' => 'date',
+            'start_date' => 'datetime',
+            'end_date' => 'datetime',
             'is_premium' => 'boolean',
             'is_active' => 'boolean',
             'featured_on_home' => 'boolean',
