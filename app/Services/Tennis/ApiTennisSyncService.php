@@ -600,7 +600,20 @@ class ApiTennisSyncService
         $update = ['last_synced_at' => now()];
         if ($dates && $dates->first_at) {
             $startDate = Carbon::parse($dates->first_at);
-            $update['start_date'] = $startDate->toDateString();
+
+            // Preserve the existing start_date if it already carries an hour
+            // component AND lands on the same calendar day: that means
+            // refreshTournamentStartDate() ran earlier in this sync and
+            // wrote a precise first-match time we don't want to drop back
+            // to 00:00. We only overwrite if the calendar day differs
+            // (which happens when the schedule moves earlier/later).
+            $existingStart = $tournament->start_date;
+            $sameDay = $existingStart && $existingStart->isSameDay($startDate);
+            $existingHasTime = $existingStart
+                && ($existingStart->hour !== 0 || $existingStart->minute !== 0);
+            if (!$sameDay || !$existingHasTime) {
+                $update['start_date'] = $startDate;
+            }
 
             // Extend end_date to match the tournament's NATURAL duration.
             // The observed last_at only covers rounds already scheduled; the
@@ -614,11 +627,14 @@ class ApiTennisSyncService
                 ? $observedEnd->toDateString()
                 : $naturalEnd->toDateString();
         }
-        if (isset($update['start_date']) && isset($update['end_date'])) {
-            $update['status'] = $this->statusFromDates(
-                Carbon::parse($update['start_date']),
-                Carbon::parse($update['end_date']),
-            );
+        if (isset($update['end_date'])) {
+            $effectiveStart = $update['start_date'] ?? $tournament->start_date;
+            if ($effectiveStart) {
+                $update['status'] = $this->statusFromDates(
+                    Carbon::parse($effectiveStart),
+                    Carbon::parse($update['end_date']),
+                );
+            }
         }
         $tournament->update($update);
 
