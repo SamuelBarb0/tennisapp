@@ -89,9 +89,14 @@ class BracketTennisScraper
         }
 
         $parsed = $parser($resp->body());
-        // Empty parse result usually means "draw not published yet" — keep
-        // retrying every few minutes instead of waiting an hour.
-        $ttl = empty($parsed) ? self::TTL_DRAW_EMPTY : self::TTL_DRAW;
+        // TTL strategy:
+        //   - empty parse → 5min (draw not published yet, keep retrying)
+        //   - has unresolved placeholders (Qualifier, Bye-less TBDs) → 5min
+        //     so confirmations get picked up within one cron cycle instead
+        //     of waiting an hour
+        //   - fully resolved draw → 1h (it won't change anymore)
+        $hasPlaceholders = $cacheSuffix === 'draw' && $this->drawHasPlaceholders($parsed);
+        $ttl = (empty($parsed) || $hasPlaceholders) ? self::TTL_DRAW_EMPTY : self::TTL_DRAW;
         $cache->put($cacheKey, $parsed, $ttl);
         return $parsed;
     }
@@ -159,6 +164,26 @@ class BracketTennisScraper
 
         usort($matches, fn($a, $b) => $a['slot'] - $b['slot']);
         return $matches;
+    }
+
+    /**
+     * Detect whether the parsed draw still contains unresolved placeholder
+     * names ("Qualifier", "Qualifier / LL", "LL", "Lucky Loser", "TBD"). Used
+     * to keep the cache TTL short so confirmations are picked up promptly.
+     */
+    private function drawHasPlaceholders(array $parsed): bool
+    {
+        foreach ($parsed as $entry) {
+            foreach (['p1', 'p2'] as $key) {
+                $name = strtolower($entry[$key] ?? '');
+                if ($name === '') continue;
+                if (str_contains($name, 'qualifier') || str_contains($name, 'lucky')
+                    || $name === 'tbd' || $name === 'll') {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private function cleanName(string $name): string
