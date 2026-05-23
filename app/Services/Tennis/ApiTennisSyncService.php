@@ -1643,8 +1643,13 @@ class ApiTennisSyncService
         $slug = Str::slug($name) ?: ('player-' . $key);
         $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
 
+        // Three-tier lookup. The third tier is what prevents api-tennis from
+        // creating "Z. Diyas" as a new row when bracket.tennis already added
+        // "Zarina Diyas" earlier in the day. Without it we end up with two
+        // Player rows for the same person — see the dedupe pass for cleanup.
         $player = Player::where('api_player_key', (string) $key)->first()
             ?? Player::where('slug', $slug)->first()
+            ?? $this->findPlayerBySurnamePrefix($name, $tour)
             ?? new Player();
 
         // If the player has no country yet, fetch full profile from api-tennis.
@@ -1676,7 +1681,10 @@ class ApiTennisSyncService
         $player->fill([
             'api_player_key'   => (string) $key,
             'name'             => $name,
-            'slug'             => $slug,
+            // Don't overwrite an existing slug with a different version of
+            // the name — keeps "zarina-diyas" stable when api-tennis sends
+            // "Z. Diyas" (which would otherwise become "z-diyas").
+            'slug'             => $player->exists ? ($player->slug ?? $slug) : $slug,
             'category'         => $player->category ?? $tour,
             'country'          => $country ?: 'Unknown',
             'nationality_code' => $iso2,
@@ -1684,6 +1692,52 @@ class ApiTennisSyncService
         ])->save();
 
         return $player;
+    }
+
+    /**
+     * Locate an existing Player by surname + first-name prefix within the
+     * same tour. Used as the third-tier fallback in upsertPlayerFromFixture
+     * to prevent creating "Z. Diyas" alongside "Zarina Diyas".
+     *
+     * Returns null on ambiguity (multiple candidates) — better to create a
+     * new row than to merge two distinct people (Jones sisters, Cerundolo
+     * brothers).
+     */
+    private function findPlayerBySurnamePrefix(string $name, string $tour): ?Player
+    {
+        $surname = BracketTennisScraper::surnameKey($name);
+        if ($surname === '') return null;
+        $prefix = $this->firstNamePrefix($name);
+        if ($prefix === '') return null;
+
+        $candidates = Player::where('category', $tour)
+            ->where('name', 'like', '%' . substr($surname, 0, 4) . '%')
+            ->get()
+            ->filter(fn($p) => BracketTennisScraper::surnameKey($p->name) === $surname);
+
+        if ($candidates->isEmpty()) return null;
+
+        // Single candidate → trust it.
+        if ($candidates->count() === 1) {
+            $only = $candidates->first();
+            $otherPrefix = $this->firstNamePrefix($only->name ?? '');
+            // Same surname but incompatible first names → it's a different
+            // person (e.g. Lloyd vs Billy Harris). Don't merge.
+            if ($otherPrefix !== '' && !str_starts_with($prefix, $otherPrefix) && !str_starts_with($otherPrefix, $prefix)) {
+                return null;
+            }
+            return $only;
+        }
+
+        // Multiple candidates → find the single one whose first-name prefix
+        // is prefix-compatible with the incoming name. If more than one
+        // matches, bail (ambiguity).
+        $matches = $candidates->filter(function ($c) use ($prefix) {
+            $cp = $this->firstNamePrefix($c->name ?? '');
+            return $cp !== '' && (str_starts_with($prefix, $cp) || str_starts_with($cp, $prefix));
+        });
+
+        return $matches->count() === 1 ? $matches->first() : null;
     }
 
     /**
