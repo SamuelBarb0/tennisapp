@@ -57,6 +57,18 @@ class PredictionRealigner
                     && ($predictedId === $currentMatch->player1_id || $predictedId === $currentMatch->player2_id);
                 if ($isValid) continue;
 
+                // SKIP "waiting" predictions for future rounds. A R64 match
+                // with both sides TBD means R128 hasn't been played yet — the
+                // user's pick (e.g. "Sinner wins R64 pos=1") isn't broken,
+                // it's just waiting for R128 to resolve. Leaving these alone
+                // prevents the realigner from clobbering 100% legitimate
+                // future-round picks every sync.
+                if ($currentMatch
+                    && in_array($currentMatch->player1_id, $placeholderIds, true)
+                    && in_array($currentMatch->player2_id, $placeholderIds, true)) {
+                    continue;
+                }
+
                 // 1) PLACEHOLDER PROMOTION
                 if (in_array($predictedId, $placeholderIds, true) && $currentMatch) {
                     $newId = null;
