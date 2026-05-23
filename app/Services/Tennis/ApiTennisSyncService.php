@@ -521,11 +521,17 @@ class ApiTennisSyncService
                 $updateAttrs['api_event_key'] = (string) $eventKey;
             }
 
-            // PLAYER FILL — only when the existing slot has TBD on one or
-            // both sides. We never overwrite a real bracket.tennis player,
-            // because that's how sibling-confusion / wrong-WC bugs happen.
-            // For qualifier slots ("real seed vs Qualifier/LL placeholder")
-            // this fills in the qualifier without touching the seeded side.
+            // PLAYER FILL — api-tennis NEVER changes players. The only
+            // exception is filling a TBD placeholder: those are slots
+            // bracket.tennis published as "Qualifier/LL/TBD" because they
+            // weren't confirmed yet at scrape time. Once the slot has a
+            // real player from BT, it stays untouched here.
+            //
+            // All other player changes (Lucky Loser substitutions, late
+            // withdrawals, name corrections) come from bracket.tennis via
+            // bootstrapFromBracketTennis(). Single source of truth = no
+            // possibility of api-tennis and BT showing different players
+            // in the same slot.
             if ($tbdId && $existing->player1_id === $tbdId && $player1) {
                 $updateAttrs['player1_id'] = $player1->id;
             }
