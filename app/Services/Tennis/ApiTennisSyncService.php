@@ -549,13 +549,19 @@ class ApiTennisSyncService
         // be whoever shows up in the next round.
         $this->inferUnreportedWalkovers($tournament);
 
-        // If the tournament has a tennisexplorer_slug we use the OFFICIAL draw
-        // order scraped from tennisexplorer.com — this is the canonical source.
-        // Otherwise we fall back to inferring the tree from player progression
-        // (less reliable but works for any tournament).
-        if ($tournament->tennisexplorer_slug) {
-            $this->reorderBracketFromScraper($tournament);
-        } else {
+        // Bracket structure is owned by the bootstrap (bracket.tennis) and
+        // the one-shot `tennis:repair-bracket-positions` admin command. The
+        // live sync deliberately does NOT call reorderBracketFromScraper
+        // anymore — it was undoing the canonical order on every run by
+        // re-mapping rows to whatever (often wrong) positions its fuzzy
+        // matcher produced. See the Roland Garros 2026 incident: Sinner
+        // would land on pos=22 instead of pos=1 every 15 minutes.
+        //
+        // For tournaments without a tennisexplorer_slug (rare path) we still
+        // need to derive positions from player progression — there's no
+        // canonical source to anchor against, so the inference fallback
+        // remains.
+        if (!$tournament->tennisexplorer_slug) {
             $this->rebuildBracketPositions($tournament);
         }
 
