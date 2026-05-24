@@ -566,6 +566,14 @@ class ApiTennisSyncService
             $updated++;
         }
 
+        // Propagate winners structurally: every finished match at round R,
+        // position P feeds the match at round R+1, position ceil(P/2).
+        // We fill the right side of that next-round slot (player1 if P is
+        // odd, player2 if P is even). This is the ONLY way R64+ slots get
+        // their players — api-tennis is no longer trusted to plant them
+        // because it would drop them in the wrong bracket_position.
+        $this->propagateWinners($tournament);
+
         $scored = 0;
         if (!empty($newlyFinished)) {
             $scored = BracketPredictionController::scoreTournament($tournament);
@@ -699,6 +707,58 @@ class ApiTennisSyncService
      *
      * Falls back to the player-progression inference if the scrape fails.
      */
+
+    /**
+     * Structural winner propagation. For every finished match at round R,
+     * position P, ensure the corresponding next-round slot
+     * (round R+1, position ceil(P/2)) holds that winner on the right side:
+     *   - P odd   → fills player1 of the next-round slot
+     *   - P even  → fills player2 of the next-round slot
+     *
+     * Only writes when the target slot currently has TBD on that side, so
+     * existing real players are never overwritten. Idempotent — safe to
+     * re-run every sync.
+     *
+     * This replaces the old "api-tennis publishes the R64+ fixtures and we
+     * blindly trust them" approach, which produced the
+     * Khachanov-vs-Trungelliti-in-R64-pos=1 bug (real match, wrong slot).
+     */
+    private function propagateWinners(Tournament $tournament): void
+    {
+        $tbdId = Player::where('name', 'TBD')->value('id');
+        if (!$tbdId) return;
+
+        $rounds = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
+
+        for ($i = 0; $i < count($rounds) - 1; $i++) {
+            $currentRound = $rounds[$i];
+            $nextRound    = $rounds[$i + 1];
+
+            $finishedMatches = $tournament->matches()
+                ->where('round', $currentRound)
+                ->whereIn('status', ['finished', 'bye'])
+                ->whereNotNull('winner_id')
+                ->get();
+
+            foreach ($finishedMatches as $m) {
+                $nextPos  = (int) ceil($m->bracket_position / 2);
+                $isOdd    = $m->bracket_position % 2 === 1;
+                $nextSide = $isOdd ? 'player1_id' : 'player2_id';
+
+                $nextMatch = $tournament->matches()
+                    ->where('round', $nextRound)
+                    ->where('bracket_position', $nextPos)
+                    ->first();
+                if (!$nextMatch) continue;
+
+                // Only fill if target slot is TBD — never overwrite a real
+                // player (could be the wrong sibling of our winner, etc.).
+                if ($nextMatch->{$nextSide} !== $tbdId) continue;
+
+                $nextMatch->update([$nextSide => $m->winner_id]);
+            }
+        }
+    }
 
     /**
      * Pick the earliest main-draw fixture from api-tennis and write its
