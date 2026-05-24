@@ -566,14 +566,6 @@ class ApiTennisSyncService
             $updated++;
         }
 
-        // Propagate winners structurally: every finished match at round R,
-        // position P feeds the match at round R+1, position ceil(P/2).
-        // We fill the right side of that next-round slot (player1 if P is
-        // odd, player2 if P is even). This is the ONLY way R64+ slots get
-        // their players — api-tennis is no longer trusted to plant them
-        // because it would drop them in the wrong bracket_position.
-        $this->propagateWinners($tournament);
-
         $scored = 0;
         if (!empty($newlyFinished)) {
             $scored = BracketPredictionController::scoreTournament($tournament);
@@ -621,6 +613,17 @@ class ApiTennisSyncService
         // complete (Quarter-finals / Semis / Final) even before the API
         // publishes those fixtures.
         $placeholders = $this->ensureBracketPlaceholders($tournament);
+
+        // Propagate winners structurally: every finished match at round R,
+        // position P feeds the match at round R+1, position ceil(P/2).
+        // We fill the right side of that next-round slot (player1 if P is
+        // odd, player2 if P is even). MUST run AFTER ensureBracketPlaceholders
+        // because that method wipes and re-creates all placeholder rows —
+        // if propagation ran first, the propagated winners would get wiped.
+        // This is the ONLY way R64+ slots get their players — api-tennis is
+        // no longer trusted to plant them because it would drop them in the
+        // wrong bracket_position.
+        $this->propagateWinners($tournament);
 
         // Backfill start/end dates from the main-draw fixtures, since the
         // tournament catalog endpoint doesn't expose dates. Status follows
