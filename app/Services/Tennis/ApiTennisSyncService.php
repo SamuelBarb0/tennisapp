@@ -484,20 +484,23 @@ class ApiTennisSyncService
                 // 'bt-bootstrap-%' slot from bracket.tennis with a mismatched
                 // fixture — bracket.tennis is the structural authority and a
                 // mismatched player would scramble the bracket again.
-                if (!$existing) {
-                    $tbdId = Player::where('name', 'TBD')->value('id');
-                    foreach ($candidates as $c) {
-                        $isSyntheticPlaceholder = str_starts_with($c->api_event_key ?? '', 'placeholder-');
-                        $bothTbd = $tbdId && $c->player1_id === $tbdId && $c->player2_id === $tbdId;
-                        if ($isSyntheticPlaceholder && $bothTbd) {
-                            $existing = $c;
-                            break;
-                        }
-                    }
-                }
-                // No "first non-empty free slot" fallback for non-TBD candidates:
-                // overwriting a bracket.tennis row whose players don't match
-                // would scramble the bracket. We skip the fixture instead.
+                // Pass 2 (synthetic TBD-vs-TBD slots) is deliberately
+                // SKIPPED here. It used to grab the first TBD-vs-TBD slot
+                // in bracket_position order, which produced the Khachanov-
+                // vs-Trungelliti-in-R64-pos=1 bug: api-tennis publishes
+                // future-round fixtures with both players named (because
+                // they're already scheduled with a date+time), but we have
+                // no way to know which structural slot they belong to —
+                // it depends on who wins the upstream R128 matches. The
+                // ONLY safe source for R64+ players is the winner
+                // propagation that runs after the upstream R128 finishes.
+                // For R128 the bootstrap fills players directly from
+                // bracket.tennis, so this fallback isn't needed there
+                // either.
+                //
+                // No "first non-empty free slot" fallback for non-TBD
+                // candidates: overwriting a bracket.tennis row whose
+                // players don't match would scramble the bracket.
             }
 
             if (!$existing) {
@@ -522,21 +525,40 @@ class ApiTennisSyncService
             }
 
             // PLAYER FILL — api-tennis NEVER changes players. The only
-            // exception is filling a TBD placeholder: those are slots
-            // bracket.tennis published as "Qualifier/LL/TBD" because they
-            // weren't confirmed yet at scrape time. Once the slot has a
-            // real player from BT, it stays untouched here.
+            // exception is filling a TBD placeholder in R128 (or whatever
+            // the starting round is): those are slots bracket.tennis
+            // published as "Qualifier/LL/TBD" because they weren't
+            // confirmed yet at scrape time. Once the slot has a real
+            // player from BT, it stays untouched here.
+            //
+            // For R64 and beyond: TBD slots are NEVER filled from
+            // api-tennis fixtures, because we can't trust the position
+            // mapping. api-tennis sometimes publishes a future-round
+            // fixture (e.g. Khachanov vs Trungelliti for R64) and the
+            // fallback "first TBD-vs-TBD slot" matcher would drop those
+            // players in the WRONG bracket_position (pos=1 instead of
+            // pos=29). Players for R64+ slots come ONLY from the
+            // structural winner propagation that runs after a R128 match
+            // is marked finished — see inferUnreportedWalkovers and the
+            // score-driven advancement code.
             //
             // All other player changes (Lucky Loser substitutions, late
             // withdrawals, name corrections) come from bracket.tennis via
             // bootstrapFromBracketTennis(). Single source of truth = no
             // possibility of api-tennis and BT showing different players
             // in the same slot.
-            if ($tbdId && $existing->player1_id === $tbdId && $player1) {
-                $updateAttrs['player1_id'] = $player1->id;
-            }
-            if ($tbdId && $existing->player2_id === $tbdId && $player2) {
-                $updateAttrs['player2_id'] = $player2->id;
+            // Only fill TBDs in rows created by the bootstrap (starting
+            // round = R128 for full draws, R64 for 56-draws, etc.). Rows
+            // created by ensureBracketPlaceholders for later rounds keep
+            // their TBDs until the winner propagation fills them.
+            $cameFromBootstrap = str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
+            if ($cameFromBootstrap) {
+                if ($tbdId && $existing->player1_id === $tbdId && $player1) {
+                    $updateAttrs['player1_id'] = $player1->id;
+                }
+                if ($tbdId && $existing->player2_id === $tbdId && $player2) {
+                    $updateAttrs['player2_id'] = $player2->id;
+                }
             }
 
             $existing->update($updateAttrs);
