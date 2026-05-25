@@ -968,6 +968,14 @@
                                     <span class="pname font-semibold truncate">
                                         {{ strtoupper($match->player1->name) }}@if($match->status_note === 'ret_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
                                     </span>
+                                    {{-- Indicator slot right after the name. Always reserves space (w-2.5) so both player rows have identical layout and the score columns align vertically. --}}
+                                    <span class="w-2.5 h-2.5 shrink-0 flex items-center justify-center">
+                                        @if($pickPlayerId == $match->player1_id && !$isFinished)
+                                        <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }}">
+                                            <svg class="w-2 h-2 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+                                        </span>
+                                        @endif
+                                    </span>
                                     @if($match->score)
                                         @php
                                             // When a player retires the API often appends a partial set
@@ -987,11 +995,6 @@
                                                 <span class="ss">{{ $s[0] ?? '' }}</span>
                                             @endforeach
                                         </span>
-                                    @endif
-                                    @if($pickPlayerId == $match->player1_id && !$isFinished)
-                                    <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }} shrink-0">
-                                        <svg class="w-2 h-2 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
-                                    </span>
                                     @endif
                                 </div>
                                 @endif
@@ -1042,6 +1045,14 @@
                                     <span class="pname font-semibold truncate">
                                         {{ strtoupper($match->player2->name) }}@if($match->status_note === 'ret_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
                                     </span>
+                                    {{-- Indicator slot right after the name (same fixed width as player1). --}}
+                                    <span class="w-2.5 h-2.5 shrink-0 flex items-center justify-center">
+                                        @if($pickPlayerId == $match->player2_id && !$isFinished)
+                                        <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }}">
+                                            <svg class="w-2 h-2 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
+                                        </span>
+                                        @endif
+                                    </span>
                                     @if($match->score)
                                         @php
                                             // See player1 block above — drop partial sets on retirement.
@@ -1064,11 +1075,6 @@
                                     @endif
                                     @if($match->status_note === 'suspended')
                                         <span class="text-[7px] font-bold text-orange-700 bg-orange-100 px-1 py-px rounded">SUSP</span>
-                                    @endif
-                                    @if($pickPlayerId == $match->player2_id && !$isFinished)
-                                    <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }} shrink-0">
-                                        <svg class="w-2 h-2 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
-                                    </span>
                                     @endif
                                 </div>
                                 @endif
