@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(php -l app\\\\Http\\\\Controllers\\\\PaymentController.php)",
+      "PowerShell(php -l app\\\\Http\\\\Controllers\\\\Admin\\\\UserController.php)",
+      "PowerShell(php -l app\\\\Models\\\\User.php)"
+    ]
+  }
+}

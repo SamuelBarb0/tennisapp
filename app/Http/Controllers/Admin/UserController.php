@@ -31,7 +31,7 @@ class UserController extends Controller
             if ($request->status === 'active')    $query->where('is_blocked', false);
         }
 
-        $users = $query->withCount(['predictions', 'redemptions'])
+        $users = $query->withCount(['bracketPredictions', 'redemptions'])
             ->latest()->paginate(20)->withQueryString();
 
         return view('admin.users.index', compact('users'));
@@ -39,15 +39,52 @@ class UserController extends Controller
 
     public function show(User $user)
     {
-        $predictions = $user->predictions()
-            ->with(['match.player1', 'match.player2', 'predictedWinner'])
+        // Bracket predictions are the real ones — the legacy per-match
+        // Prediction model is no longer used. We join each prediction to
+        // its corresponding TennisMatch via (tournament_id, round, position)
+        // because BracketPrediction doesn't carry a match_id FK.
+        $bracketPredictions = $user->bracketPredictions()
+            ->with(['tournament', 'predictedWinner'])
             ->latest()->take(20)->get();
+
+        // Hydrate each prediction with the actual match record (player1,
+        // player2, winner) so the admin table can show "Sinner vs Tabur".
+        $matchKeys = $bracketPredictions->map(fn($p) => [
+            'tournament_id'    => $p->tournament_id,
+            'round'            => $p->round,
+            'bracket_position' => $p->position,
+        ])->all();
+
+        $matches = collect();
+        if (!empty($matchKeys)) {
+            $q = \App\Models\TennisMatch::with(['player1', 'player2', 'winner']);
+            foreach ($matchKeys as $k) {
+                $q->orWhere(function ($w) use ($k) {
+                    $w->where('tournament_id', $k['tournament_id'])
+                      ->where('round', $k['round'])
+                      ->where('bracket_position', $k['bracket_position']);
+                });
+            }
+            $matches = $q->get()->keyBy(fn($m) => $m->tournament_id . '|' . $m->round . '|' . $m->bracket_position);
+        }
+
+        // Attach the match to each prediction object so the view can read it.
+        foreach ($bracketPredictions as $p) {
+            $key = $p->tournament_id . '|' . $p->round . '|' . $p->position;
+            $p->setRelation('match', $matches->get($key));
+        }
+
+        $stats = [
+            'total_predictions' => $user->bracketPredictions()->count(),
+            'correct'           => $user->bracketPredictions()->where('is_correct', true)->count(),
+        ];
+
         $redemptions = $user->redemptions()->with('prize')->latest()->get();
         $payments    = TournamentPayment::where('user_id', $user->id)
             ->with('tournament')
             ->latest()->take(20)->get();
 
-        return view('admin.users.show', compact('user', 'predictions', 'redemptions', 'payments'));
+        return view('admin.users.show', compact('user', 'bracketPredictions', 'stats', 'redemptions', 'payments'));
     }
 
     public function toggleBlock(User $user)

@@ -81,6 +81,17 @@
             <div class="bg-tc-accent/15 text-tc-primary text-[8px] font-bold text-center py-0.5 tracking-widest">TU PRONÓSTICO</div>
         </template>
 
+        @php
+            // Pre-compute the set scores once so both player rows render
+            // identical fixed-width columns and stay aligned vertically even
+            // when one player's name is much longer than the other's.
+            $sets = $match->score ? array_values(array_filter(explode(' ', $match->score))) : [];
+            $setPairs = array_map(function($set) {
+                $s = explode('-', $set);
+                return ['p1' => $s[0] ?? '', 'p2' => $s[1] ?? ''];
+            }, $sets);
+        @endphp
+
         {{-- Player 1 --}}
         <div class="pr {{ $isCancelled ? 'l' : ($isFinished ? ($p1Won ? 'w' : 'l') : ($isLive ? 'lv' : 'n')) }}"
              :class="{
@@ -89,12 +100,13 @@
              }">
             <span class="text-[9px] font-mono w-4 text-right opacity-40 shrink-0">{{ $match->player1->ranking ?? '' }}</span>
             <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-[2px] object-cover shrink-0" loading="lazy">
-            <span class="font-semibold truncate flex-1">{{ strtoupper($match->player1->name) }}</span>
-            @if($match->score)
-                @foreach(explode(' ', $match->score) as $set)
-                    @php $s = explode('-', $set); @endphp
-                    <span class="ss text-[10px] font-mono font-bold w-3 text-center">{{ $s[0] ?? '' }}</span>
-                @endforeach
+            <span class="font-semibold truncate flex-1 min-w-0">{{ strtoupper($match->player1->name) }}</span>
+            @if(count($setPairs) > 0)
+                <div class="flex items-center gap-0.5 shrink-0">
+                    @foreach($setPairs as $pair)
+                        <span class="ss text-[10px] font-mono font-bold w-3 text-center">{{ $pair['p1'] }}</span>
+                    @endforeach
+                </div>
             @endif
             @if($isFinished && $userPick === $match->player1_id)
                 <span class="w-2 h-2 rounded-full {{ $predCorrect ? 'bg-green-400' : 'bg-red-400' }} shrink-0"></span>
@@ -113,14 +125,15 @@
              }">
             <span class="text-[9px] font-mono w-4 text-right opacity-40 shrink-0">{{ $match->player2->ranking ?? '' }}</span>
             <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-[2px] object-cover shrink-0" loading="lazy">
-            <span class="font-semibold truncate flex-1">{{ strtoupper($match->player2->name) }}</span>
+            <span class="font-semibold truncate flex-1 min-w-0">{{ strtoupper($match->player2->name) }}</span>
             @if($isCancelled)
                 <span class="text-[7px] font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">CANC</span>
-            @elseif($match->score)
-                @foreach(explode(' ', $match->score) as $set)
-                    @php $s = explode('-', $set); @endphp
-                    <span class="ss text-[10px] font-mono font-bold w-3 text-center">{{ $s[1] ?? '' }}</span>
-                @endforeach
+            @elseif(count($setPairs) > 0)
+                <div class="flex items-center gap-0.5 shrink-0">
+                    @foreach($setPairs as $pair)
+                        <span class="ss text-[10px] font-mono font-bold w-3 text-center">{{ $pair['p2'] }}</span>
+                    @endforeach
+                </div>
             @endif
             @if($isFinished && $userPick === $match->player2_id)
                 <span class="w-2 h-2 rounded-full {{ $predCorrect ? 'bg-green-400' : 'bg-red-400' }} shrink-0"></span>

@@ -98,11 +98,11 @@
             <div class="text-xs text-gray-500 mt-1">Puntos</div>
         </div>
         <div class="bg-gray-50 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold">{{ $user->predictions->count() }}</div>
+            <div class="text-2xl font-bold">{{ $stats['total_predictions'] }}</div>
             <div class="text-xs text-gray-500 mt-1">Pronósticos</div>
         </div>
         <div class="bg-gray-50 rounded-xl p-4 text-center">
-            <div class="text-2xl font-bold text-green-600">{{ $user->predictions->where('is_correct', true)->count() }}</div>
+            <div class="text-2xl font-bold text-green-600">{{ $stats['correct'] }}</div>
             <div class="text-xs text-gray-500 mt-1">Aciertos</div>
         </div>
         <div class="bg-gray-50 rounded-xl p-4 text-center">
@@ -121,33 +121,41 @@
         <table class="w-full">
             <thead>
                 <tr class="border-b border-gray-100">
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Torneo</th>
+                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Ronda</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Partido</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Predicción</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Resultado</th>
                     <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Puntos</th>
-                    <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
-                @forelse($user->predictions()->with(['match.player1', 'match.player2', 'predictedWinner'])->latest()->take(10)->get() as $prediction)
+                @forelse($bracketPredictions as $prediction)
                 <tr class="hover:bg-gray-50 transition-colors">
-                    <td class="px-6 py-4 text-sm">{{ $prediction->match->player1->name ?? '' }} vs {{ $prediction->match->player2->name ?? '' }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $prediction->predictedWinner->name ?? '-' }}</td>
+                    <td class="px-6 py-4 text-sm">{{ $prediction->tournament->name ?? '-' }} <span class="text-xs text-gray-400">{{ $prediction->tournament->type ?? '' }}</span></td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ $prediction->round }} · pos {{ $prediction->position }}</td>
+                    <td class="px-6 py-4 text-sm">
+                        @if($prediction->match)
+                            {{ $prediction->match->player1->name ?? '?' }} vs {{ $prediction->match->player2->name ?? '?' }}
+                        @else
+                            <span class="text-gray-400 italic">Por definir</span>
+                        @endif
+                    </td>
+                    <td class="px-6 py-4 text-sm font-medium">{{ $prediction->predictedWinner->name ?? '-' }}</td>
                     <td class="px-6 py-4">
                         @if($prediction->is_correct === true)
-                            <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-600">Correcto</span>
+                            <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-600">Acierto</span>
                         @elseif($prediction->is_correct === false)
-                            <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-600">Incorrecto</span>
+                            <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-600">Fallo</span>
                         @else
                             <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-500">Pendiente</span>
                         @endif
                     </td>
                     <td class="px-6 py-4 text-sm font-medium">{{ $prediction->points_earned ?? 0 }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $prediction->created_at->bogota()->format('d/m/Y') }}</td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="px-6 py-8 text-center text-sm text-gray-400">No hay pronósticos registrados</td>
+                    <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-400">No hay pronósticos registrados</td>
                 </tr>
                 @endforelse
             </tbody>

@@ -41,7 +41,7 @@
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">{{ $user->email }}</td>
                     <td class="px-6 py-4 text-sm font-medium">{{ number_format($user->points ?? 0) }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ $user->predictions_count ?? 0 }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ $user->bracket_predictions_count ?? 0 }}</td>
                     <td class="px-6 py-4">
                         @if($user->is_blocked)
                             <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-600">Bloqueado</span>

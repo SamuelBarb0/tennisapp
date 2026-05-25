@@ -42,6 +42,11 @@ class User extends Authenticatable
         return $this->hasMany(Prediction::class);
     }
 
+    public function bracketPredictions()
+    {
+        return $this->hasMany(BracketPrediction::class);
+    }
+
     public function redemptions()
     {
         return $this->hasMany(PrizeRedemption::class);
