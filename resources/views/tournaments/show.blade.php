@@ -965,13 +965,10 @@
                                         @endif
                                     </span>
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
-                                    <span class="pname font-semibold truncate">
-                                        {{ strtoupper($match->player1->name) }}@if($match->status_note === 'ret_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
-                                    </span>
-                                    {{-- Indicator slot right after the name. Always reserves space (w-2.5) so both player rows have identical layout and the score columns align vertically. --}}
-                                    <span class="w-2.5 h-2.5 shrink-0 flex items-center justify-center">
+                                    <span class="pname font-semibold truncate flex items-center gap-1">
+                                        <span class="truncate">{{ strtoupper($match->player1->name) }}@if($match->status_note === 'ret_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p1')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif</span>
                                         @if($pickPlayerId == $match->player1_id && !$isFinished)
-                                        <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }}">
+                                        <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }} shrink-0">
                                             <svg class="w-2 h-2 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
                                         </span>
                                         @endif
@@ -1042,13 +1039,10 @@
                                         @endif
                                     </span>
                                     <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
-                                    <span class="pname font-semibold truncate">
-                                        {{ strtoupper($match->player2->name) }}@if($match->status_note === 'ret_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif
-                                    </span>
-                                    {{-- Indicator slot right after the name (same fixed width as player1). --}}
-                                    <span class="w-2.5 h-2.5 shrink-0 flex items-center justify-center">
+                                    <span class="pname font-semibold truncate flex items-center gap-1">
+                                        <span class="truncate">{{ strtoupper($match->player2->name) }}@if($match->status_note === 'ret_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(ret.)</span>@elseif($match->status_note === 'wo_p2')<span class="text-[8px] text-red-500 font-normal ml-1">(wo)</span>@endif</span>
                                         @if($pickPlayerId == $match->player2_id && !$isFinished)
-                                        <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }}">
+                                        <span class="pk-dot {{ $pickCorrect === null ? 'pnd' : ($pickCorrect === true ? 'ok' : 'err') }} shrink-0">
                                             <svg class="w-2 h-2 text-tc-primary" fill="currentColor" viewBox="0 0 20 20"><path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/></svg>
                                         </span>
                                         @endif
