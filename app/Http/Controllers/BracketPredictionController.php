@@ -131,33 +131,24 @@ class BracketPredictionController extends Controller
     {
         $scored = 0;
 
-        // Get all finished matches grouped by round with bracket position
+        // Score each finished match against predictions that target the same
+        // (round, bracket_position). Critical: we use the match's actual
+        // bracket_position — NOT a counted index — because not all matches
+        // in a round finish in order (or at all). Counting indexes was the
+        // original bug that marked Sabalenka's pick as wrong because the
+        // first finished R128 was at pos=4, so the scorer compared pos=1
+        // pick vs pos=4 winner.
         $matches = $tournament->matches()
             ->where('status', 'finished')
             ->whereNotNull('winner_id')
-            ->orderBy('bracket_position')
             ->get();
 
-        // Collect eliminated player IDs (matches finished where they lost)
-        $eliminated = [];
         foreach ($matches as $match) {
-            if ($match->player1_id && $match->player1_id != $match->winner_id) $eliminated[$match->player1_id] = true;
-            if ($match->player2_id && $match->player2_id != $match->winner_id) $eliminated[$match->player2_id] = true;
-        }
+            $points = $tournament->getPointsForRound($match->round);
 
-        foreach ($matches as $match) {
-            $round = $match->round;
-            // Calculate the bracket position for this match within its round
-            $roundMatches = $matches->where('round', $round)->values();
-            $matchIndex = $roundMatches->search(fn($m) => $m->id === $match->id);
-            $position = $matchIndex + 1;
-
-            $points = $tournament->getPointsForRound($round);
-
-            // Find all unsettled predictions for this round+position
             $predictions = BracketPrediction::where('tournament_id', $tournament->id)
-                ->where('round', $round)
-                ->where('position', $position)
+                ->where('round', $match->round)
+                ->where('position', $match->bracket_position)
                 ->whereNull('is_correct')
                 ->get();
 
@@ -166,7 +157,7 @@ class BracketPredictionController extends Controller
                 $earned = $isCorrect ? $points : 0;
 
                 $pred->update([
-                    'is_correct' => $isCorrect,
+                    'is_correct'    => $isCorrect,
                     'points_earned' => $earned,
                 ]);
 
@@ -178,8 +169,15 @@ class BracketPredictionController extends Controller
             }
         }
 
-        // Mark as incorrect any pending prediction whose picked player is already eliminated —
-        // they can't possibly win a later round.
+        // Eliminated-player propagation: a pick on a player who already lost
+        // somewhere in the bracket can never win later rounds. Mark those
+        // future-round picks as incorrect so the UI shows them as "fallaste"
+        // immediately instead of leaving them as "pendiente" forever.
+        $eliminated = [];
+        foreach ($matches as $match) {
+            if ($match->player1_id && $match->player1_id != $match->winner_id) $eliminated[$match->player1_id] = true;
+            if ($match->player2_id && $match->player2_id != $match->winner_id) $eliminated[$match->player2_id] = true;
+        }
         if (!empty($eliminated)) {
             $stale = BracketPrediction::where('tournament_id', $tournament->id)
                 ->whereNull('is_correct')

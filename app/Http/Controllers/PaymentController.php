@@ -28,6 +28,23 @@ class PaymentController extends Controller
                 ->with('success', 'Ya tienes acceso a este torneo.');
         }
 
+        // Block checkout if the tournament has already started — there's no
+        // way for the user to fill the bracket after the first match begins,
+        // so charging them would be a guaranteed refund request.
+        $firstMatch = $tournament->matches()
+            ->whereNotIn('status', ['cancelled'])
+            ->whereNotNull('scheduled_at')
+            ->orderBy('scheduled_at')
+            ->first();
+        $deadline = $firstMatch?->scheduled_at?->copy()->subMinute();
+        $alreadyStarted = $tournament->status === 'finished'
+            || !$firstMatch
+            || now()->gte($deadline);
+        if ($alreadyStarted) {
+            return redirect()->route('tournaments.show', $tournament)
+                ->with('error', 'Este torneo ya cerró las predicciones — no es posible pagar para participar ahora.');
+        }
+
         try {
             ['init_point' => $url] = $mp->createPreferenceForTournament($user, $tournament);
         } catch (\Throwable $e) {
