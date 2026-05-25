@@ -101,19 +101,21 @@
             <span class="text-[9px] font-mono w-4 text-right opacity-40 shrink-0">{{ $match->player1->ranking ?? '' }}</span>
             <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-[2px] object-cover shrink-0" loading="lazy">
             <span class="font-semibold truncate flex-1 min-w-0">{{ strtoupper($match->player1->name) }}</span>
-            @if(count($setPairs) > 0)
-                <div class="flex items-center gap-0.5 shrink-0">
-                    @foreach($setPairs as $pair)
-                        <span class="ss text-[10px] font-mono font-bold w-3 text-center">{{ $pair['p1'] }}</span>
-                    @endforeach
-                </div>
-            @endif
-            @if($isFinished && $userPick === $match->player1_id)
-                <span class="w-2 h-2 rounded-full {{ $predCorrect ? 'bg-green-400' : 'bg-red-400' }} shrink-0"></span>
-            @endif
-            <template x-if="pickedId === {{ $match->player1_id }} && !resolved && !{{ ($isFinished || $isCancelled) ? 'true' : 'false' }}">
-                <span class="w-2 h-2 rounded-full bg-tc-accent shrink-0"></span>
-            </template>
+            {{-- Fixed-width score block (always rendered; empty when no score). Ensures sets in player1 align with player2 vertically. --}}
+            <div class="flex items-center gap-0.5 shrink-0 ml-auto">
+                @foreach($setPairs as $pair)
+                    <span class="ss text-[10px] font-mono font-bold w-3 text-center">{{ $pair['p1'] }}</span>
+                @endforeach
+            </div>
+            {{-- Fixed-width indicator slot. Always reserves space so both player rows have the same total width and the score columns line up. --}}
+            <div class="w-2 h-2 shrink-0 flex items-center justify-center">
+                @if($isFinished && $userPick === $match->player1_id)
+                    <span class="w-2 h-2 rounded-full {{ $predCorrect ? 'bg-green-400' : 'bg-red-400' }}"></span>
+                @endif
+                <template x-if="pickedId === {{ $match->player1_id }} && !resolved && !{{ ($isFinished || $isCancelled) ? 'true' : 'false' }}">
+                    <span class="w-2 h-2 rounded-full bg-tc-accent"></span>
+                </template>
+            </div>
         </div>
 
         <div class="h-px bg-gray-100"></div>
@@ -127,20 +129,22 @@
             <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-[2px] object-cover shrink-0" loading="lazy">
             <span class="font-semibold truncate flex-1 min-w-0">{{ strtoupper($match->player2->name) }}</span>
             @if($isCancelled)
-                <span class="text-[7px] font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">CANC</span>
-            @elseif(count($setPairs) > 0)
-                <div class="flex items-center gap-0.5 shrink-0">
+                <span class="text-[7px] font-bold text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded ml-auto shrink-0">CANC</span>
+            @else
+                <div class="flex items-center gap-0.5 shrink-0 ml-auto">
                     @foreach($setPairs as $pair)
                         <span class="ss text-[10px] font-mono font-bold w-3 text-center">{{ $pair['p2'] }}</span>
                     @endforeach
                 </div>
             @endif
-            @if($isFinished && $userPick === $match->player2_id)
-                <span class="w-2 h-2 rounded-full {{ $predCorrect ? 'bg-green-400' : 'bg-red-400' }} shrink-0"></span>
-            @endif
-            <template x-if="pickedId === {{ $match->player2_id }} && !resolved && !{{ ($isFinished || $isCancelled) ? 'true' : 'false' }}">
-                <span class="w-2 h-2 rounded-full bg-tc-accent shrink-0"></span>
-            </template>
+            <div class="w-2 h-2 shrink-0 flex items-center justify-center">
+                @if($isFinished && $userPick === $match->player2_id)
+                    <span class="w-2 h-2 rounded-full {{ $predCorrect ? 'bg-green-400' : 'bg-red-400' }}"></span>
+                @endif
+                <template x-if="pickedId === {{ $match->player2_id }} && !resolved && !{{ ($isFinished || $isCancelled) ? 'true' : 'false' }}">
+                    <span class="w-2 h-2 rounded-full bg-tc-accent"></span>
+                </template>
+            </div>
         </div>
 
         {{-- Date for pending --}}
