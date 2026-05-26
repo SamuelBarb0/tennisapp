@@ -100,6 +100,9 @@ class TennisInferMissingPicks extends Command
                             ->where('round', $r)
                             ->where('position', $targetPos)
                             ->exists();
+                        if ($r === 'R64' && $p->predicted_winner_id == 9) {
+                            $this->line("  [debug] conflict at pos=$targetPos = " . ($conflict ? 'YES' : 'NO'));
+                        }
                         if ($conflict) continue;
 
                         $this->line(sprintf(
