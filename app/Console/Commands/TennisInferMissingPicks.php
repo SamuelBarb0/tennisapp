@@ -6,6 +6,7 @@ use App\Models\BracketPrediction;
 use App\Models\Tournament;
 use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Reconstruct missing first-round picks by walking BACK from later rounds.
@@ -75,54 +76,70 @@ class TennisInferMissingPicks extends Command
                     }
                 }
 
-                $this->line("  [debug2] round=$r userIds=[" . implode(",", $userIds) . "]");
                 foreach ($userIds as $uid) {
-                    // Iterate: each pass migrates picks whose target slot is
-                    // currently empty. Migrations can free up slots that
-                    // unblock other picks in subsequent passes. Cap at 10
-                    // passes to avoid pathological loops.
-                    for ($pass = 0; $pass < 10; $pass++) {
-                        $picks = BracketPrediction::where('tournament_id', $t->id)
-                            ->where('user_id', $uid)
-                            ->where('round', $r)
-                            ->get();
+                    // Collect every pick that has a UNIQUE reachable target
+                    // different from its current position. We then re-park
+                    // them all at temporary negative positions in a single
+                    // transaction (to dodge the unique constraint on
+                    // (tournament_id, user_id, round, position)), then
+                    // write the final positions. This is necessary because
+                    // chains of picks often form closed cycles (pos=2→15,
+                    // 15→7, 7→21, 21→15) where no single migration is
+                    // possible until all positions are vacated at once.
+                    $picks = BracketPrediction::where('tournament_id', $t->id)
+                        ->where('user_id', $uid)
+                        ->where('round', $r)
+                        ->get();
 
-                        $migratedThisPass = 0;
-                        foreach ($picks as $p) {
-                            $reachableSlots = array_keys($reachableByPlayer[$p->predicted_winner_id] ?? []);
-                            if (count($reachableSlots) !== 1) continue;
-                            $targetPos = $reachableSlots[0];
-                            if ($targetPos === $p->position) continue;
+                    $migrations = []; // [prediction_id => target_pos]
+                    foreach ($picks as $p) {
+                        $reachableSlots = array_keys($reachableByPlayer[$p->predicted_winner_id] ?? []);
+                        if (count($reachableSlots) !== 1) continue;
+                        $targetPos = $reachableSlots[0];
+                        if ($targetPos === $p->position) continue;
+                        $migrations[$p->id] = $targetPos;
+                    }
 
-                            // Don't displace an existing pick at the target
-                            // slot — only migrate to empty slots.
-                            $conflict = BracketPrediction::where('tournament_id', $t->id)
-                                ->where('user_id', $uid)
-                                ->where('round', $r)
-                                ->where('position', $targetPos)
-                                ->exists();
-                            if ($conflict) continue;
+                    if (empty($migrations)) continue;
 
-                            $this->line(sprintf(
-                                '  user=%d %s migrate pos=%d → pos=%d (%s)',
-                                $uid,
-                                $r,
-                                $p->position,
-                                $targetPos,
-                                optional(\App\Models\Player::find($p->predicted_winner_id))->name ?? '?',
-                            ));
+                    // Check for duplicate targets — two picks wanting the
+                    // same slot. Drop the ones that conflict to avoid an
+                    // ambiguous move. (Should be rare; happens when two
+                    // duplicate players exist or a row has the wrong id.)
+                    $targetCounts = array_count_values($migrations);
+                    foreach ($migrations as $pid => $target) {
+                        if ($targetCounts[$target] > 1) unset($migrations[$pid]);
+                    }
+                    if (empty($migrations)) continue;
 
-                            if (!$dry) {
-                                $p->update(['position' => $targetPos]);
+                    foreach ($migrations as $pid => $target) {
+                        $p = $picks->firstWhere('id', $pid);
+                        $this->line(sprintf(
+                            '  user=%d %s migrate pos=%d → pos=%d (%s)',
+                            $uid,
+                            $r,
+                            $p->position,
+                            $target,
+                            optional(\App\Models\Player::find($p->predicted_winner_id))->name ?? '?',
+                        ));
+                    }
+
+                    if (!$dry) {
+                        DB::transaction(function () use ($migrations) {
+                            // Phase 1: park all migrating picks at negative
+                            // positions so they don't collide with each other
+                            // or with non-migrating picks at the final slots.
+                            $park = -100000;
+                            foreach (array_keys($migrations) as $pid) {
+                                BracketPrediction::where('id', $pid)
+                                    ->update(['position' => $park--]);
                             }
-                            $migratedThisPass++;
-                        }
-
-                        if ($migratedThisPass === 0) break;
-                        // In dry-run we can't actually migrate, so the slot
-                        // state doesn't change between passes — break to
-                        // avoid an infinite re-print of the same lines.
-                        if ($dry) break;
+                            // Phase 2: place each pick at its final slot.
+                            foreach ($migrations as $pid => $target) {
+                                BracketPrediction::where('id', $pid)
+                                    ->update(['position' => $target]);
+                            }
+                        });
                     }
                 }
             }
