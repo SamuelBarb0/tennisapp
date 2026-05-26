@@ -150,8 +150,15 @@ class TennisInferMissingPicks extends Command
                                     ->update(['position' => $target]);
                             }
                             // Phase 2b: restore non-migrating picks to
-                            // their original slots, but ONLY if that slot
-                            // isn't already taken by a migrated pick.
+                            // their original slots. If the original slot
+                            // is taken by a migrated pick, the
+                            // non-migrating one is unrecoverable (its
+                            // player can't be placed anywhere structurally
+                            // valid) — delete it rather than leave it
+                            // parked at a negative position. The user's
+                            // intent is preserved for the picks that DID
+                            // migrate; the conflicting one would have been
+                            // wrong anyway.
                             foreach ($picks as $p) {
                                 if (isset($migrations[$p->id])) continue;
                                 $orig = $originalPos[$p->id];
@@ -161,10 +168,7 @@ class TennisInferMissingPicks extends Command
                                     ->where('position', $orig)
                                     ->exists();
                                 if ($occupied) {
-                                    // Original slot was taken by a migrator.
-                                    // Leave this pick parked (negative pos)
-                                    // — it'll be re-evaluated next round /
-                                    // next run. Better than overwriting.
+                                    BracketPrediction::where('id', $p->id)->delete();
                                     continue;
                                 }
                                 BracketPrediction::where('id', $p->id)
