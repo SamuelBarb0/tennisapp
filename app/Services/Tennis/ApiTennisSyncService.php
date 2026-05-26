@@ -490,33 +490,66 @@ class ApiTennisSyncService
                     }
                 }
 
-                // Pass 2: synthetic 'placeholder-%' slot with TBD-vs-TBD. These
-                // are the rows ensureBracketPlaceholders() seeded for later
-                // rounds (R64+ when starting from R128, R32+ when starting
-                // from R64). Player matching can't work because both sides are
-                // TBD, so we fill them in bracket_position order.
+                // Pass 2: STRUCTURAL placement for R64+ fixtures whose target
+                // slot is still TBD-vs-TBD. We compute where the fixture
+                // belongs by finding the two players in the previous round
+                // and using bracket math: the next-round slot is
+                // ceil(prev_pos / 2). This is SAFE because we anchor to a
+                // previous-round slot that already has both players (not
+                // an arbitrary first-empty slot).
                 //
-                // Restricted to 'placeholder-%' on purpose: never overwrite a
-                // 'bt-bootstrap-%' slot from bracket.tennis with a mismatched
-                // fixture — bracket.tennis is the structural authority and a
-                // mismatched player would scramble the bracket again.
-                // Pass 2 (synthetic TBD-vs-TBD slots) is deliberately
-                // SKIPPED here. It used to grab the first TBD-vs-TBD slot
-                // in bracket_position order, which produced the Khachanov-
-                // vs-Trungelliti-in-R64-pos=1 bug: api-tennis publishes
-                // future-round fixtures with both players named (because
-                // they're already scheduled with a date+time), but we have
-                // no way to know which structural slot they belong to —
-                // it depends on who wins the upstream R128 matches. The
-                // ONLY safe source for R64+ players is the winner
-                // propagation that runs after the upstream R128 finishes.
-                // For R128 the bootstrap fills players directly from
-                // bracket.tennis, so this fallback isn't needed there
-                // either.
-                //
-                // No "first non-empty free slot" fallback for non-TBD
-                // candidates: overwriting a bracket.tennis row whose
-                // players don't match would scramble the bracket.
+                // The old "first TBD-vs-TBD slot in order" approach caused
+                // the Khachanov-vs-Trungelliti-in-R64-pos=1 bug at Roland
+                // Garros. The fix is structural anchoring.
+                if (!$existing && $round !== 'R128') {
+                    $rounds = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
+                    $i = array_search($round, $rounds, true);
+                    $prevRound = $i > 0 ? $rounds[$i - 1] : null;
+                    if ($prevRound) {
+                        $prevP1 = $player1 ? TennisMatch::where('tournament_id', $tournament->id)
+                            ->where('round', $prevRound)
+                            ->where(function ($q) use ($player1) {
+                                $q->where('player1_id', $player1->id)
+                                  ->orWhere('player2_id', $player1->id);
+                            })
+                            ->orderByDesc('id') // prefer the most recent match for this player in prev round
+                            ->first() : null;
+                        $prevP2 = $player2 ? TennisMatch::where('tournament_id', $tournament->id)
+                            ->where('round', $prevRound)
+                            ->where(function ($q) use ($player2) {
+                                $q->where('player1_id', $player2->id)
+                                  ->orWhere('player2_id', $player2->id);
+                            })
+                            ->orderByDesc('id')
+                            ->first() : null;
+
+                        if ($prevP1 && $prevP2) {
+                            $targetSlot = (int) ceil(min($prevP1->bracket_position, $prevP2->bracket_position) / 2);
+                            // Also check both feed into the same target.
+                            $altSlot   = (int) ceil(max($prevP1->bracket_position, $prevP2->bracket_position) / 2);
+                            if ($targetSlot === $altSlot) {
+                                $candidate = TennisMatch::where('tournament_id', $tournament->id)
+                                    ->where('round', $round)
+                                    ->where('bracket_position', $targetSlot)
+                                    ->first();
+                                if ($candidate) {
+                                    $isPlaceholder = str_starts_with($candidate->api_event_key ?? '', 'placeholder-');
+                                    $tbdId = Player::where('name', 'TBD')->value('id');
+                                    $bothTbd = $tbdId && $candidate->player1_id === $tbdId && $candidate->player2_id === $tbdId;
+                                    if ($isPlaceholder && $bothTbd) {
+                                        // Safe to assign: structural slot
+                                        // and currently empty.
+                                        $candidate->update([
+                                            'player1_id' => $player1->id,
+                                            'player2_id' => $player2->id,
+                                        ]);
+                                        $existing = $candidate;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if (!$existing) {
