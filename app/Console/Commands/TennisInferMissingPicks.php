@@ -48,6 +48,71 @@ class TennisInferMissingPicks extends Command
         foreach ($tournaments as $t) {
             $this->info(PHP_EOL . "→ {$t->name} [{$t->type}] (id={$t->id})");
 
+            // PRE-PASS: migrate picks whose predicted_winner_id cannot
+            // structurally reach the slot they're sitting in. When a user
+            // filled the bracket while the order was different, their R64+
+            // picks may name a player who, given the current R128 layout,
+            // can only land in a different R64 slot. We move the pick to
+            // the unique reachable slot if possible (and that slot is empty
+            // for this user).
+            foreach ($rounds as $r) {
+                if ($r === 'R128') continue; // R128 has no upstream to validate
+
+                $matchesByPos = $t->matches()->where('round', $r)->get()->keyBy('bracket_position');
+                if ($matchesByPos->isEmpty()) continue;
+
+                // Build a map: for each slot K in this round, which two
+                // upstream-round slots feed it (2K-1 and 2K) and which
+                // player_ids could potentially win them.
+                $prevRound = $rounds[array_search($r, $rounds) - 1];
+                $prevByPos = $t->matches()->where('round', $prevRound)->get()->keyBy('bracket_position');
+                $reachableByPlayer = []; // [player_id => [slot_pos, ...]]
+                foreach ($matchesByPos as $slotPos => $_m) {
+                    foreach ([$slotPos * 2 - 1, $slotPos * 2] as $feedPos) {
+                        $fm = $prevByPos[$feedPos] ?? null;
+                        if (!$fm) continue;
+                        if ($fm->player1_id) $reachableByPlayer[$fm->player1_id][$slotPos] = true;
+                        if ($fm->player2_id) $reachableByPlayer[$fm->player2_id][$slotPos] = true;
+                    }
+                }
+
+                foreach ($userIds as $uid) {
+                    $picks = BracketPrediction::where('tournament_id', $t->id)
+                        ->where('user_id', $uid)
+                        ->where('round', $r)
+                        ->get();
+
+                    foreach ($picks as $p) {
+                        $reachableSlots = array_keys($reachableByPlayer[$p->predicted_winner_id] ?? []);
+                        if (count($reachableSlots) !== 1) continue;
+                        $targetPos = $reachableSlots[0];
+                        if ($targetPos === $p->position) continue;
+
+                        // Don't displace an existing pick at the target
+                        // slot — only migrate to empty slots.
+                        $conflict = BracketPrediction::where('tournament_id', $t->id)
+                            ->where('user_id', $uid)
+                            ->where('round', $r)
+                            ->where('position', $targetPos)
+                            ->exists();
+                        if ($conflict) continue;
+
+                        $this->line(sprintf(
+                            '  user=%d %s migrate pos=%d → pos=%d (%s)',
+                            $uid,
+                            $r,
+                            $p->position,
+                            $targetPos,
+                            optional(\App\Models\Player::find($p->predicted_winner_id))->name ?? '?',
+                        ));
+
+                        if (!$dry) {
+                            $p->update(['position' => $targetPos]);
+                        }
+                    }
+                }
+            }
+
             // Walk backwards: for each round, use round+1 picks to fill
             // missing round picks.
             for ($i = count($rounds) - 2; $i >= 0; $i--) {
