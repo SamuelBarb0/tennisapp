@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\BracketPrediction;
-use App\Models\TennisMatch;
 use App\Models\Tournament;
 use App\Models\User;
 use Illuminate\Console\Command;
@@ -59,7 +58,6 @@ class TennisInferMissingPicks extends Command
                 if ($r === 'R128') continue; // R128 has no upstream to validate
 
                 $matchesByPos = $t->matches()->where('round', $r)->get()->keyBy('bracket_position');
-                $this->line("  [debug] round=$r matchesByPos=" . $matchesByPos->count());
                 if ($matchesByPos->isEmpty()) continue;
 
                 // Build a map: for each slot K in this round, which two
@@ -78,45 +76,52 @@ class TennisInferMissingPicks extends Command
                 }
 
                 foreach ($userIds as $uid) {
-                    $picks = BracketPrediction::where('tournament_id', $t->id)
-                        ->where('user_id', $uid)
-                        ->where('round', $r)
-                        ->get();
-                    $this->line("  [debug] uid=$uid round=$r picks=" . $picks->count() . " reachableByPlayerKeys=" . count($reachableByPlayer));
-
-                    foreach ($picks as $p) {
-                        $reachableSlots = array_keys($reachableByPlayer[$p->predicted_winner_id] ?? []);
-                        if ($r === 'R64' && $p->predicted_winner_id == 9) {
-                            $this->line("  [debug] uid=$uid pick pos={$p->position} pid={$p->predicted_winner_id} reachableSlots=[" . implode(",", $reachableSlots) . "]");
-                        }
-                        if (count($reachableSlots) !== 1) continue;
-                        $targetPos = $reachableSlots[0];
-                        if ($targetPos === $p->position) continue;
-
-                        // Don't displace an existing pick at the target
-                        // slot — only migrate to empty slots.
-                        $conflict = BracketPrediction::where('tournament_id', $t->id)
+                    // Iterate: each pass migrates picks whose target slot is
+                    // currently empty. Migrations can free up slots that
+                    // unblock other picks in subsequent passes. Cap at 10
+                    // passes to avoid pathological loops.
+                    for ($pass = 0; $pass < 10; $pass++) {
+                        $picks = BracketPrediction::where('tournament_id', $t->id)
                             ->where('user_id', $uid)
                             ->where('round', $r)
-                            ->where('position', $targetPos)
-                            ->exists();
-                        if ($r === 'R64' && $p->predicted_winner_id == 9) {
-                            $this->line("  [debug] conflict at pos=$targetPos = " . ($conflict ? 'YES' : 'NO'));
-                        }
-                        if ($conflict) continue;
+                            ->get();
 
-                        $this->line(sprintf(
-                            '  user=%d %s migrate pos=%d → pos=%d (%s)',
-                            $uid,
-                            $r,
-                            $p->position,
-                            $targetPos,
-                            optional(\App\Models\Player::find($p->predicted_winner_id))->name ?? '?',
-                        ));
+                        $migratedThisPass = 0;
+                        foreach ($picks as $p) {
+                            $reachableSlots = array_keys($reachableByPlayer[$p->predicted_winner_id] ?? []);
+                            if (count($reachableSlots) !== 1) continue;
+                            $targetPos = $reachableSlots[0];
+                            if ($targetPos === $p->position) continue;
 
-                        if (!$dry) {
-                            $p->update(['position' => $targetPos]);
+                            // Don't displace an existing pick at the target
+                            // slot — only migrate to empty slots.
+                            $conflict = BracketPrediction::where('tournament_id', $t->id)
+                                ->where('user_id', $uid)
+                                ->where('round', $r)
+                                ->where('position', $targetPos)
+                                ->exists();
+                            if ($conflict) continue;
+
+                            $this->line(sprintf(
+                                '  user=%d %s migrate pos=%d → pos=%d (%s)',
+                                $uid,
+                                $r,
+                                $p->position,
+                                $targetPos,
+                                optional(\App\Models\Player::find($p->predicted_winner_id))->name ?? '?',
+                            ));
+
+                            if (!$dry) {
+                                $p->update(['position' => $targetPos]);
+                            }
+                            $migratedThisPass++;
                         }
+
+                        if ($migratedThisPass === 0) break;
+                        // In dry-run we can't actually migrate, so the slot
+                        // state doesn't change between passes — break to
+                        // avoid an infinite re-print of the same lines.
+                        if ($dry) break;
                     }
                 }
             }
