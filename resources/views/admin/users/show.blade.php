@@ -112,6 +112,31 @@
     </div>
 </div>
 
+{{-- Brackets del usuario --}}
+@if($userTournaments->isNotEmpty())
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+    <div class="px-6 py-4 border-b border-gray-100">
+        <h3 class="font-semibold">Brackets del usuario</h3>
+        <p class="text-xs text-gray-500 mt-1">Abre el bracket de este usuario en cualquiera de sus torneos.</p>
+    </div>
+    <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        @foreach($userTournaments as $t)
+            <a href="{{ route('tournaments.show', ['tournament' => $t, 'user' => $user->id]) }}"
+               target="_blank"
+               class="flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50 hover:bg-tc-primary/5 border border-gray-100 hover:border-tc-primary/20 transition">
+                <div>
+                    <div class="text-sm font-semibold text-gray-800">{{ $t->name }}</div>
+                    <div class="text-xs text-gray-500">{{ $t->type }}</div>
+                </div>
+                <svg class="w-4 h-4 text-tc-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                </svg>
+            </a>
+        @endforeach
+    </div>
+</div>
+@endif
+
 {{-- Recent Predictions --}}
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
     <div class="px-6 py-4 border-b border-gray-100">

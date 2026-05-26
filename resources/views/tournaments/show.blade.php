@@ -491,9 +491,18 @@
         $siblingsLocked = $needsPayment ?? false;
     @endphp
     @if($siblings->isNotEmpty())
+    @php
+        // Preserve the ?user=X query string when switching between sibling
+        // tournaments (ATP↔WTA), so admins and ranking-clickers stay viewing
+        // the same person's bracket across both tours. Without this the tab
+        // bounces back to your own bracket on the other tour.
+        $viewingQuery = $viewingOtherUser && $viewingUser
+            ? ['user' => $viewingUser->id]
+            : [];
+    @endphp
     <div class="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
         <div class="inline-flex bg-white border border-gray-200 rounded-full p-1 shadow-sm">
-            <a href="{{ route('tournaments.show', $tournament) }}"
+            <a href="{{ route('tournaments.show', array_merge([$tournament], $viewingQuery)) }}"
                class="px-5 py-2 rounded-full text-sm font-bold transition-all
                       bg-tc-primary text-white shadow">
                 {{ $tournament->tour_code }} · Bracket
@@ -508,7 +517,7 @@
                         {{ $sibling->tour_code }} · Bracket
                     </span>
                 @else
-                    <a href="{{ route('tournaments.show', $sibling) }}"
+                    <a href="{{ route('tournaments.show', array_merge([$sibling], $viewingQuery)) }}"
                        class="px-5 py-2 rounded-full text-sm font-bold transition-all
                               text-gray-600 hover:bg-gray-100">
                         {{ $sibling->tour_code }} · Bracket
@@ -947,7 +956,7 @@
                                 @elseif($isPlaceholder1)
                                 <div class="pr l"><span class="text-[9px] text-gray-300 italic flex-1">Por definir</span></div>
                                 @else
-                                <div class="pr {{ $isCancelled ? 'l' : ($isFinished ? ($p1Won ? 'w' : 'l') : ($isLive ? 'lv' : 'n')) }} {{ $pickPlayerId == $match->player1_id && $pickCorrect === true ? 'correct' : '' }} {{ $pickPlayerId == $match->player1_id && $pickCorrect === false ? 'wrong' : '' }}"
+                                <div class="pr {{ $isCancelled ? 'l' : ($isFinished ? ($p1Won ? 'w' : 'l') : ($isLive ? 'lv' : 'n')) }} {{ $pickPlayerId == $match->player1_id && $pickCorrect === true ? 'correct' : '' }} {{ $pickPlayerId == $match->player1_id && $pickCorrect === false ? 'wrong' : '' }} {{ $pickPlayerId == $match->player1_id && $pickCorrect === null && !$isFinished ? 'pk' : '' }}"
                                      @auth
                                      @if(!$predictionsLocked && $bracketFillable && !$isFinished && !$isCancelled)
                                      x-on:click="pickWinner('{{ $round }}', {{ $position }}, {{ $match->player1_id }})"
@@ -1021,7 +1030,7 @@
                                 @elseif($isPlaceholder2)
                                 <div class="pr l"><span class="text-[9px] text-gray-300 italic flex-1">Por definir</span></div>
                                 @else
-                                <div class="pr {{ $isCancelled ? 'l' : ($isFinished ? ($p2Won ? 'w' : 'l') : ($isLive ? 'lv' : 'n')) }} {{ $pickPlayerId == $match->player2_id && $pickCorrect === true ? 'correct' : '' }} {{ $pickPlayerId == $match->player2_id && $pickCorrect === false ? 'wrong' : '' }}"
+                                <div class="pr {{ $isCancelled ? 'l' : ($isFinished ? ($p2Won ? 'w' : 'l') : ($isLive ? 'lv' : 'n')) }} {{ $pickPlayerId == $match->player2_id && $pickCorrect === true ? 'correct' : '' }} {{ $pickPlayerId == $match->player2_id && $pickCorrect === false ? 'wrong' : '' }} {{ $pickPlayerId == $match->player2_id && $pickCorrect === null && !$isFinished ? 'pk' : '' }}"
                                      @auth
                                      @if(!$predictionsLocked && $bracketFillable && !$isFinished && !$isCancelled)
                                      x-on:click="pickWinner('{{ $round }}', {{ $position }}, {{ $match->player2_id }})"

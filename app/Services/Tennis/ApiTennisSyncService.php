@@ -517,6 +517,21 @@ class ApiTennisSyncService
             // Build the actual update payload. Start with results-only fields.
             $updateAttrs = $resultAttrs;
 
+            // Re-anchor winner_id to a player_id that ACTUALLY lives in this
+            // slot's player1/player2. api-tennis sometimes returns a slightly
+            // different Player (sibling-confusion artifact in their data) for
+            // the same physical match — if we used that Player as winner_id,
+            // the propagation downstream would carry the wrong ID into R64+.
+            // Since bracket.tennis owns the slot's identity, we keep it.
+            $apiWinnerId = $updateAttrs['winner_id'] ?? null;
+            if ($apiWinnerId && $existing->player1_id && $existing->player2_id) {
+                if ($winnerSide === 'First Player') {
+                    $updateAttrs['winner_id'] = $existing->player1_id;
+                } elseif ($winnerSide === 'Second Player') {
+                    $updateAttrs['winner_id'] = $existing->player2_id;
+                }
+            }
+
             // Adopt the real api_event_key when upgrading a placeholder slot,
             // so future syncs match by event_key instead of falling back to
             // player matching.
@@ -747,6 +762,7 @@ class ApiTennisSyncService
                 $nextPos  = (int) ceil($m->bracket_position / 2);
                 $isOdd    = $m->bracket_position % 2 === 1;
                 $nextSide = $isOdd ? 'player1_id' : 'player2_id';
+                $nextSeedSide = $isOdd ? 'player1_seed' : 'player2_seed';
 
                 $nextMatch = $tournament->matches()
                     ->where('round', $nextRound)
@@ -758,7 +774,18 @@ class ApiTennisSyncService
                 // player (could be the wrong sibling of our winner, etc.).
                 if ($nextMatch->{$nextSide} !== $tbdId) continue;
 
-                $nextMatch->update([$nextSide => $m->winner_id]);
+                // Carry over the winner's seed/badge from the current round
+                // so the next round still shows "1 J. Sinner" or "Q J. Faria"
+                // instead of dropping the marker. The winner's seed is in
+                // whichever side they played on this match.
+                $winnerSeed = $m->player1_id === $m->winner_id
+                    ? $m->player1_seed
+                    : ($m->player2_id === $m->winner_id ? $m->player2_seed : null);
+
+                $nextMatch->update([
+                    $nextSide     => $m->winner_id,
+                    $nextSeedSide => $winnerSeed,
+                ]);
             }
         }
     }

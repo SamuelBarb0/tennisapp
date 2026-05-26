@@ -79,12 +79,18 @@ class UserController extends Controller
             'correct'           => $user->bracketPredictions()->where('is_correct', true)->count(),
         ];
 
+        // Tournaments where the user has at least one prediction — used to
+        // surface "Ver bracket" links from the admin user detail page.
+        $userTournaments = \App\Models\Tournament::whereIn('id', $user->bracketPredictions()->distinct()->pluck('tournament_id'))
+            ->orderByDesc('start_date')
+            ->get();
+
         $redemptions = $user->redemptions()->with('prize')->latest()->get();
         $payments    = TournamentPayment::where('user_id', $user->id)
             ->with('tournament')
             ->latest()->take(20)->get();
 
-        return view('admin.users.show', compact('user', 'bracketPredictions', 'stats', 'redemptions', 'payments'));
+        return view('admin.users.show', compact('user', 'bracketPredictions', 'stats', 'userTournaments', 'redemptions', 'payments'));
     }
 
     public function toggleBlock(User $user)
