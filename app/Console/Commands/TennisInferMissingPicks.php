@@ -86,6 +86,9 @@ class TennisInferMissingPicks extends Command
 
                     foreach ($picks as $p) {
                         $reachableSlots = array_keys($reachableByPlayer[$p->predicted_winner_id] ?? []);
+                        if ($r === 'R64' && $p->predicted_winner_id == 9) {
+                            $this->line("  [debug] uid=$uid pick pos={$p->position} pid={$p->predicted_winner_id} reachableSlots=[" . implode(",", $reachableSlots) . "]");
+                        }
                         if (count($reachableSlots) !== 1) continue;
                         $targetPos = $reachableSlots[0];
                         if ($targetPos === $p->position) continue;
