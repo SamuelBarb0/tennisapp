@@ -59,6 +59,7 @@ class TennisInferMissingPicks extends Command
                 if ($r === 'R128') continue; // R128 has no upstream to validate
 
                 $matchesByPos = $t->matches()->where('round', $r)->get()->keyBy('bracket_position');
+                $this->line("  [debug] round=$r matchesByPos=" . $matchesByPos->count());
                 if ($matchesByPos->isEmpty()) continue;
 
                 // Build a map: for each slot K in this round, which two
@@ -81,6 +82,7 @@ class TennisInferMissingPicks extends Command
                         ->where('user_id', $uid)
                         ->where('round', $r)
                         ->get();
+                    $this->line("  [debug] uid=$uid round=$r picks=" . $picks->count() . " reachableByPlayerKeys=" . count($reachableByPlayer));
 
                     foreach ($picks as $p) {
                         $reachableSlots = array_keys($reachableByPlayer[$p->predicted_winner_id] ?? []);
