@@ -372,12 +372,18 @@ class ApiTennisSyncService
                 continue;
             }
 
-            // Skip cancelled fixtures — the API leaves the original scheduled
-            // pairing as "Cancelled" when a player withdraws and adds a NEW
-            // fixture with the replacement opponent. Keeping both creates
-            // duplicate matches in the same round.
+            // Cancelled fixtures: api-tennis emits these when a player
+            // withdraws before the match and adds a NEW fixture with the
+            // replacement opponent. We still want to mark the original DB
+            // row as cancelled so the UI shows it correctly — but the
+            // structural changes (new opponent) come via bracket.tennis +
+            // the replacement fixture, NOT this cancelled one.
             $apiStatus = mb_strtolower((string) ($f['event_status'] ?? ''));
             if (str_contains($apiStatus, 'cancelled')) {
+                $cancelledMatch = TennisMatch::where('api_event_key', (string) $eventKey)->first();
+                if ($cancelledMatch && $cancelledMatch->status !== 'cancelled') {
+                    $cancelledMatch->update(['status' => 'cancelled']);
+                }
                 $skippedQualy++;
                 continue;
             }
@@ -452,19 +458,29 @@ class ApiTennisSyncService
             $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first();
 
             if (!$existing) {
+                // Candidates for player-based matching: placeholder rows,
+                // bootstrap rows, AND existing match rows that are still
+                // unresolved (pending or cancelled). The last group covers
+                // the Lucky Loser case: api-tennis cancels the original
+                // "X vs Withdrew" fixture and emits a new "X vs LL" one
+                // with a different event_key. We need to land that new
+                // fixture on the existing slot, not skip it.
                 $candidates = TennisMatch::where('tournament_id', $tournament->id)
                     ->where('round', $round)
                     ->where(function ($q) {
                         $q->where('api_event_key', 'LIKE', 'placeholder-%')
-                          ->orWhere('api_event_key', 'LIKE', 'bt-bootstrap-%');
+                          ->orWhere('api_event_key', 'LIKE', 'bt-bootstrap-%')
+                          ->orWhereIn('status', ['pending', 'cancelled']);
                     })
                     ->orderBy('bracket_position')
                     ->get();
 
                 // Pass 1: candidate where at least one player matches. Handles
                 // the qualifier case (real seed vs TBD on bracket.tennis, then
-                // api-tennis fills in the qualifier later) AND the case where
-                // a winner from a previous round already populated one side.
+                // api-tennis fills in the qualifier later), the case where a
+                // winner from a previous round already populated one side, AND
+                // the Lucky Loser case where the slot's old opponent withdrew
+                // and a new fixture brings the replacement.
                 foreach ($candidates as $c) {
                     $matchesP1 = $player1 && ($c->player1_id === $player1->id || $c->player2_id === $player1->id);
                     $matchesP2 = $player2 && ($c->player1_id === $player2->id || $c->player2_id === $player2->id);
@@ -573,6 +589,29 @@ class ApiTennisSyncService
                 }
                 if ($tbdId && $existing->player2_id === $tbdId && $player2) {
                     $updateAttrs['player2_id'] = $player2->id;
+                }
+            }
+
+            // Lucky Loser case: the slot was previously cancelled (its
+            // original opponent withdrew). api-tennis has now emitted a NEW
+            // fixture for the same slot with a different opponent. We
+            // adopt the new event_key and update the side whose player
+            // changed. The seeded/canonical side from BT stays put — we
+            // only swap the side that doesn't match either current player.
+            if ($existing->status === 'cancelled' && $player1 && $player2) {
+                $p1Matches = $existing->player1_id === $player1->id || $existing->player2_id === $player1->id;
+                $p2Matches = $existing->player1_id === $player2->id || $existing->player2_id === $player2->id;
+                if ($p1Matches !== $p2Matches) {
+                    // Exactly one of the fixture's players matches a side
+                    // of the existing slot — the OTHER side is the LL.
+                    $matchedPlayer = $p1Matches ? $player1 : $player2;
+                    $newPlayer     = $p1Matches ? $player2 : $player1;
+                    if ($existing->player1_id === $matchedPlayer->id) {
+                        $updateAttrs['player2_id'] = $newPlayer->id;
+                    } else {
+                        $updateAttrs['player1_id'] = $newPlayer->id;
+                    }
+                    $updateAttrs['api_event_key'] = (string) $eventKey;
                 }
             }
 

@@ -116,15 +116,16 @@ class PredictionRealigner
                         ->first();
 
                     if ($conflict) {
-                        $conflictMatch = $matchesByPos[$newPos] ?? null;
-                        $conflictValid = $conflictMatch
-                            && ($conflict->predicted_winner_id === $conflictMatch->player1_id
-                                || $conflict->predicted_winner_id === $conflictMatch->player2_id);
-                        if ($conflictValid) {
-                            $totals['orphaned']++;
-                            continue;
-                        }
-                        $conflict->delete();
+                        // There's already a prediction at the target slot.
+                        // We NEVER delete user predictions here — even if the
+                        // conflicting one looks "broken" right now, it may be
+                        // a valid pick whose own player is about to be
+                        // migrated in this same realign pass. Skip and let
+                        // the next sync resolve. Worst case: the pick stays
+                        // at its old position and counts as orphan, but the
+                        // user's data is preserved.
+                        $totals['orphaned']++;
+                        continue;
                     }
 
                     $p->update(['position' => $newPos]);
