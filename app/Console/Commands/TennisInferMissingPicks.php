@@ -75,6 +75,7 @@ class TennisInferMissingPicks extends Command
                     }
                 }
 
+                $this->line("  [debug2] round=$r userIds=[" . implode(",", $userIds) . "]");
                 foreach ($userIds as $uid) {
                     // Iterate: each pass migrates picks whose target slot is
                     // currently empty. Migrations can free up slots that
