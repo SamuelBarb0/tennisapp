@@ -862,21 +862,39 @@
 
                         {{-- BYE card --}}
                         @if($match->status === 'bye')
+                        @php
+                            // The bootstrap may place the real player on either side
+                            // (player1 or player2). The other side is the TBD
+                            // placeholder. We always render the real player on top
+                            // and the "BYE" label below, regardless of which side
+                            // the bootstrap chose.
+                            $byeRealPlayer = null;
+                            $byeRealSeed   = null;
+                            if ($match->player1 && $match->player1->name !== 'TBD') {
+                                $byeRealPlayer = $match->player1;
+                                $byeRealSeed   = $match->player1_seed;
+                            } elseif ($match->player2 && $match->player2->name !== 'TBD') {
+                                $byeRealPlayer = $match->player2;
+                                $byeRealSeed   = $match->player2_seed;
+                            }
+                        @endphp
                         <div class="px-1" style="position:absolute; width:100%; transform:translateY(-50%); top:{{ $centerPx }}px;">
                             <div class="bye-card">
+                                @if($byeRealPlayer)
                                 <div class="pr n" style="opacity:0.55;">
                                     <span class="seed text-[8.5px] font-mono font-black text-tc-primary w-5 text-right shrink-0">
-                                        @if($match->player1_seed)
-                                            @if(in_array($match->player1_seed, ['Q','WC','LL','PR','SE']))
-                                                <span class="text-[7px] font-bold {{ $match->player1_seed === 'WC' ? 'text-amber-600' : 'text-tc-primary/60' }}">{{ $match->player1_seed }}</span>
+                                        @if($byeRealSeed)
+                                            @if(in_array($byeRealSeed, ['Q','WC','LL','PR','SE']))
+                                                <span class="text-[7px] font-bold {{ $byeRealSeed === 'WC' ? 'text-amber-600' : 'text-tc-primary/60' }}">{{ $byeRealSeed }}</span>
                                             @else
-                                                {{ $match->player1_seed }}
+                                                {{ $byeRealSeed }}
                                             @endif
                                         @endif
                                     </span>
-                                    <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
-                                    <span class="font-semibold truncate flex-1">{{ strtoupper($match->player1->name) }}</span>
+                                    <img src="{{ $byeRealPlayer->flag_url }}" alt="" class="w-4 h-3 rounded-sm object-cover shrink-0" loading="lazy">
+                                    <span class="font-semibold truncate flex-1">{{ strtoupper($byeRealPlayer->name) }}</span>
                                 </div>
+                                @endif
                                 <div class="h-px bg-slate-100"></div>
                                 <div class="pr l" style="justify-content:center;">
                                     <span class="text-[8px] font-bold uppercase tracking-widest text-slate-300">BYE</span>
