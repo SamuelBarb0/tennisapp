@@ -125,19 +125,50 @@ class TennisInferMissingPicks extends Command
                     }
 
                     if (!$dry) {
-                        DB::transaction(function () use ($migrations) {
-                            // Phase 1: park all migrating picks at negative
-                            // positions so they don't collide with each other
-                            // or with non-migrating picks at the final slots.
+                        DB::transaction(function () use ($migrations, $picks) {
+                            // Phase 1: park ALL of the user's picks for this
+                            // round (both migrating and non-migrating) at
+                            // negative positions. A migrating pick may want
+                            // to land on a slot currently occupied by a
+                            // non-migrating pick (e.g. Cobolli pos=4 → 13
+                            // when pos=13 already has someone whose target
+                            // can't be calculated). Parking everything
+                            // avoids the unique-constraint collision and
+                            // we put back the non-migrators at their
+                            // original positions in phase 2.
                             $park = -100000;
-                            foreach (array_keys($migrations) as $pid) {
-                                BracketPrediction::where('id', $pid)
+                            $originalPos = [];
+                            foreach ($picks as $p) {
+                                $originalPos[$p->id] = $p->position;
+                                BracketPrediction::where('id', $p->id)
                                     ->update(['position' => $park--]);
                             }
-                            // Phase 2: place each pick at its final slot.
+                            // Phase 2a: place migrating picks at their
+                            // calculated target slots.
                             foreach ($migrations as $pid => $target) {
                                 BracketPrediction::where('id', $pid)
                                     ->update(['position' => $target]);
+                            }
+                            // Phase 2b: restore non-migrating picks to
+                            // their original slots, but ONLY if that slot
+                            // isn't already taken by a migrated pick.
+                            foreach ($picks as $p) {
+                                if (isset($migrations[$p->id])) continue;
+                                $orig = $originalPos[$p->id];
+                                $occupied = BracketPrediction::where('tournament_id', $p->tournament_id)
+                                    ->where('user_id', $p->user_id)
+                                    ->where('round', $p->round)
+                                    ->where('position', $orig)
+                                    ->exists();
+                                if ($occupied) {
+                                    // Original slot was taken by a migrator.
+                                    // Leave this pick parked (negative pos)
+                                    // — it'll be re-evaluated next round /
+                                    // next run. Better than overwriting.
+                                    continue;
+                                }
+                                BracketPrediction::where('id', $p->id)
+                                    ->update(['position' => $orig]);
                             }
                         });
                     }
