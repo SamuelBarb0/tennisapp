@@ -21,7 +21,7 @@ class TennisRealignPredictions extends Command
 
         foreach ($tournaments as $t) {
             $r = $realigner->realign($t);
-            $this->info("→ {$t->name} [{$t->type}] (id={$t->id})  promovidas={$r['promoted']} migradas={$r['moved']} huérfanas={$r['orphaned']}");
+            $this->info("→ {$t->name} [{$t->type}] (id={$t->id})  promovidas={$r['promoted']} migradas={$r['moved']} transferidas={$r['transferred']} huérfanas={$r['orphaned']}");
         }
 
         return self::SUCCESS;

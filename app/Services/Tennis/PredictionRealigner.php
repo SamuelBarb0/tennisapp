@@ -9,7 +9,7 @@ use App\Models\Tournament;
 /**
  * Repairs bracket predictions after a sync moved players around.
  *
- * Two operations, applied in order per round:
+ * Three operations, applied in order per round:
  *
  *  1. PLACEHOLDER PROMOTION
  *     If a prediction targets a placeholder player (TBD / Qualifier / LL /
@@ -25,16 +25,38 @@ use App\Models\Tournament;
  *     position. If the user already has a valid prediction at that new
  *     position, the broken one is left alone (very rare).
  *
+ *  3. REPLACEMENT TRANSFER
+ *     If a prediction targets a real player who is no longer ANYWHERE in
+ *     the bracket (withdrawal / Lucky Loser substitution mid-tournament),
+ *     and the slot the user picked now holds a different real player, the
+ *     prediction is transferred to that replacement — in this round AND in
+ *     every later round where the same user picked the withdrawn player.
+ *     This honors the user's intent: "I bet on this slot, whoever fills it".
+ *
  * Returns a summary array (counts of promoted / moved / orphaned per round).
  */
 class PredictionRealigner
 {
-    /** @return array{promoted:int,moved:int,orphaned:int} */
+    /** @return array{promoted:int,moved:int,orphaned:int,transferred:int} */
     public function realign(Tournament $tournament): array
     {
-        $totals = ['promoted' => 0, 'moved' => 0, 'orphaned' => 0];
+        $totals = ['promoted' => 0, 'moved' => 0, 'orphaned' => 0, 'transferred' => 0];
         $placeholderIds = $this->placeholderPlayerIds();
         $rounds = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
+
+        // Build a set of every Player ID currently anchored to ANY slot of
+        // the bracket. Used by the "replacement transfer" pass to detect
+        // players who were dropped from the draw entirely (withdrawal).
+        $playersInBracket = [];
+        foreach ($tournament->matches()->get() as $m) {
+            if ($m->player1_id) $playersInBracket[$m->player1_id] = true;
+            if ($m->player2_id) $playersInBracket[$m->player2_id] = true;
+        }
+
+        // Track per-user replacements detected at the starting round so we
+        // can fan them out to later rounds in a single second pass.
+        // Format: [user_id => [withdrawn_player_id => replacement_player_id]]
+        $userReplacements = [];
 
         foreach ($rounds as $round) {
             $matchesByPos = $tournament->matches()->where('round', $round)->get()->keyBy('bracket_position');
@@ -110,7 +132,49 @@ class PredictionRealigner
                     continue;
                 }
 
+                // 3) REPLACEMENT TRANSFER
+                //    The predicted player is no longer anywhere in the
+                //    bracket (full withdrawal) and the slot the user picked
+                //    now holds a different real player. Transfer the pick
+                //    to that replacement, AND remember the X→Y mapping so
+                //    we can fan it out to later rounds in pass 2.
+                $isWithdrawn = !isset($playersInBracket[$predictedId])
+                    && !in_array($predictedId, $placeholderIds, true);
+                if ($isWithdrawn && $currentMatch) {
+                    $replacementId = null;
+                    foreach ([$currentMatch->player1_id, $currentMatch->player2_id] as $candidate) {
+                        if (!$candidate) continue;
+                        if (in_array($candidate, $placeholderIds, true)) continue;
+                        $replacementId = $candidate;
+                        break;
+                    }
+                    if ($replacementId) {
+                        $p->update(['predicted_winner_id' => $replacementId]);
+                        $userReplacements[$p->user_id][$predictedId] = $replacementId;
+                        $totals['transferred']++;
+                        continue;
+                    }
+                }
+
                 $totals['orphaned']++;
+            }
+        }
+
+        // PASS 2 — fan out withdrawn-player replacements to later rounds.
+        // If user 25 picked Fils to win R64, R32 and R16, and we detected
+        // in R128 that Fils withdrew and was replaced by Wong, we now
+        // change every "Fils" pick of user 25 to "Wong" — across all
+        // later rounds.
+        foreach ($userReplacements as $userId => $map) {
+            foreach ($map as $withdrawnId => $replacementId) {
+                $extra = BracketPrediction::where('tournament_id', $tournament->id)
+                    ->where('user_id', $userId)
+                    ->where('predicted_winner_id', $withdrawnId)
+                    ->get();
+                foreach ($extra as $p) {
+                    $p->update(['predicted_winner_id' => $replacementId]);
+                    $totals['transferred']++;
+                }
             }
         }
 
