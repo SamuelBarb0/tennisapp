@@ -129,6 +129,83 @@ class TournamentController extends Controller
     }
 
     /**
+     * Manage seed/badge overrides for the starting round of a tournament.
+     * Used to assign Q / WC / LL / PR / SE / seed numbers when
+     * bracket.tennis didn't capture them.
+     *
+     * The override is applied by ApiTennisSyncService::applySeedOverrides()
+     * on every sync, and the seed propagates structurally to later rounds
+     * via propagateWinners() — so a single override here cascades through
+     * the whole bracket.
+     */
+    public function badges(Tournament $tournament)
+    {
+        $startingRound = $tournament->matches()
+            ->whereIn('round', ['R128', 'R64', 'R32', 'R16'])
+            ->orderByRaw("FIELD(round, 'R128', 'R64', 'R32', 'R16')")
+            ->value('round') ?? 'R128';
+
+        $matches = $tournament->matches()
+            ->where('round', $startingRound)
+            ->with(['player1', 'player2'])
+            ->orderBy('bracket_position')
+            ->get();
+
+        $overrides = \App\Models\PlayerSeedOverride::where('tournament_id', $tournament->id)
+            ->get()
+            ->keyBy('player_id');
+
+        return view('admin.tournaments.badges', compact('tournament', 'matches', 'overrides', 'startingRound'));
+    }
+
+    public function updateBadges(Request $request, Tournament $tournament)
+    {
+        $data = $request->validate([
+            'badges'           => 'nullable|array',
+            'badges.*'         => 'nullable|string|max:8',
+        ]);
+
+        $badges = $data['badges'] ?? [];
+
+        // Allowed badge values. Numeric seeds 1-64 + the symbolic ones.
+        $allowed = ['', 'Q', 'WC', 'LL', 'PR', 'SE'];
+
+        foreach ($badges as $playerId => $badge) {
+            $playerId = (int) $playerId;
+            $badge = trim((string) $badge);
+
+            if ($badge === '') {
+                \App\Models\PlayerSeedOverride::where('tournament_id', $tournament->id)
+                    ->where('player_id', $playerId)
+                    ->delete();
+                continue;
+            }
+
+            // Accept numeric seeds (1-64) or symbolic codes.
+            $isNumericSeed = ctype_digit($badge) && (int) $badge >= 1 && (int) $badge <= 64;
+            $upper = strtoupper($badge);
+            if (!$isNumericSeed && !in_array($upper, $allowed, true)) {
+                continue;
+            }
+
+            \App\Models\PlayerSeedOverride::updateOrCreate(
+                ['tournament_id' => $tournament->id, 'player_id' => $playerId],
+                ['badge' => $isNumericSeed ? $badge : $upper, 'reason' => 'Admin manual override'],
+            );
+        }
+
+        // Trigger an immediate sync so the badges propagate now.
+        try {
+            app(\App\Services\Tennis\ApiTennisSyncService::class)->syncTournamentLive($tournament);
+        } catch (\Throwable $e) {
+            // Sync failure shouldn't block the admin save — they can re-trigger from elsewhere.
+        }
+
+        return redirect()->route('admin.tournaments.badges', $tournament)
+            ->with('success', 'Marcas actualizadas y aplicadas al bracket.');
+    }
+
+    /**
      * Show tiebreak resolution panel — only surfaces groups of users tied on points.
      */
     public function tiebreaks(Tournament $tournament)

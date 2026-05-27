@@ -2040,7 +2040,8 @@ class ApiTennisSyncService
      */
     private function computeStatusNote(array $fixture, ?string $winnerSide): ?string
     {
-        $status = mb_strtolower((string) ($fixture['event_status'] ?? ''));
+        // Normalize "Walk Over" / "Walk-over" / "walkover" into one token.
+        $status = mb_strtolower(str_replace([' ', '-'], '', (string) ($fixture['event_status'] ?? '')));
         if (str_contains($status, 'suspended')) return 'suspended';
         if (str_contains($status, 'retired')) {
             // Loser is the side opposite to the winner
@@ -2144,13 +2145,14 @@ class ApiTennisSyncService
 
     private function mapStatus(?string $apiStatus): string
     {
-        $s = mb_strtolower((string) $apiStatus);
+        // Normalize "Walk Over" / "Walk-over" / "walkover" into one token.
+        $s = mb_strtolower(str_replace([' ', '-'], '', (string) $apiStatus));
         return match (true) {
             $s === 'finished'                                  => 'finished',
             in_array($s, ['walkover', 'retired'], true)        => 'finished',
             str_contains($s, 'suspended')                      => 'live', // shown as live; status_note flags it
-            in_array($s, ['live', 'in progress'], true)        => 'live',
-            str_starts_with($s, 'set ')                        => 'live',
+            in_array($s, ['live', 'inprogress'], true)         => 'live',
+            str_starts_with($s, 'set')                         => 'live',
             default                                            => 'pending',
         };
     }
