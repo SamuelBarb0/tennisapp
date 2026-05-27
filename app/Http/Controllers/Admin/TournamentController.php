@@ -151,6 +151,20 @@ class TournamentController extends Controller
             ->orderBy('bracket_position')
             ->get();
 
+        // Clean up orphan overrides: badges that point to players no longer
+        // present anywhere in this tournament's bracket (withdrawal + Lucky
+        // Loser substitution leaves the old player's override dangling).
+        $playersInBracket = $tournament->matches()
+            ->get(['player1_id', 'player2_id'])
+            ->flatMap(fn($m) => [$m->player1_id, $m->player2_id])
+            ->filter()
+            ->unique()
+            ->all();
+
+        \App\Models\PlayerSeedOverride::where('tournament_id', $tournament->id)
+            ->whereNotIn('player_id', $playersInBracket)
+            ->delete();
+
         $overrides = \App\Models\PlayerSeedOverride::where('tournament_id', $tournament->id)
             ->get()
             ->keyBy('player_id');
