@@ -842,10 +842,6 @@ class ApiTennisSyncService
                     ->first();
                 if (!$nextMatch) continue;
 
-                // Only fill if target slot is TBD — never overwrite a real
-                // player (could be the wrong sibling of our winner, etc.).
-                if ($nextMatch->{$nextSide} !== $tbdId) continue;
-
                 // Carry over the winner's seed/badge from the current round
                 // so the next round still shows "1 J. Sinner" or "Q J. Faria"
                 // instead of dropping the marker. The winner's seed is in
@@ -854,10 +850,20 @@ class ApiTennisSyncService
                     ? $m->player1_seed
                     : ($m->player2_id === $m->winner_id ? $m->player2_seed : null);
 
-                $nextMatch->update([
-                    $nextSide     => $m->winner_id,
-                    $nextSeedSide => $winnerSeed,
-                ]);
+                if ($nextMatch->{$nextSide} === $tbdId) {
+                    // Slot is empty: fill both player and seed.
+                    $nextMatch->update([
+                        $nextSide     => $m->winner_id,
+                        $nextSeedSide => $winnerSeed,
+                    ]);
+                } elseif ($nextMatch->{$nextSide} === $m->winner_id
+                          && $nextMatch->{$nextSeedSide} === null
+                          && $winnerSeed !== null) {
+                    // Player is already there (from a previous propagation
+                    // or from api-tennis) but the seed wasn't carried over.
+                    // Backfill the seed without touching the player.
+                    $nextMatch->update([$nextSeedSide => $winnerSeed]);
+                }
             }
         }
     }
