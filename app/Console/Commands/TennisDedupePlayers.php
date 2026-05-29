@@ -36,10 +36,25 @@ class TennisDedupePlayers extends Command
         $dry = (bool) $this->option('dry-run');
         if ($dry) $this->warn('DRY RUN — ningún cambio será persistido.');
 
-        // Group all players by (category, surnameKey). Anything with >1 row
-        // is a candidate group to inspect.
-        $groups = Player::all()
-            ->groupBy(fn($p) => ($p->category ?? '') . '|' . BracketTennisScraper::surnameKey($p->name ?? ''))
+        // Group all players by (category, anyNameToken). Each player ends up
+        // in MULTIPLE groups — one for each token of their name. This catches
+        // cross-naming-convention duplicates like:
+        //   "Maiar Sherif Ahmed Abdelaziz"  (BT, uses Abdelaziz as surname)
+        //   "M. Sherif"                     (api-tennis, uses Sherif)
+        // They land together in the "sherif" group and prefix-matching can
+        // identify them as the same person.
+        $groups = [];
+        foreach (Player::all() as $p) {
+            $tokens = $this->nameTokens($p->name ?? '');
+            foreach ($tokens as $tok) {
+                if ($tok === '' || strlen($tok) < 3) continue;
+                $key = ($p->category ?? '') . '|' . $tok;
+                $groups[$key][$p->id] = $p; // keyed by id to dedupe within a group
+            }
+        }
+        // Convert to collections and drop singletons.
+        $groups = collect($groups)
+            ->map(fn($g) => collect(array_values($g)))
             ->filter(fn($g) => $g->count() > 1);
 
         $merged = 0;
@@ -82,20 +97,41 @@ class TennisDedupePlayers extends Command
     }
 
     /**
-     * Two names are prefix-compatible when, after dropping initials,
-     * the shorter first-name prefix is a prefix of the longer one.
-     * Examples:
-     *   "Susan Bandecchi" + "S. Bandecchi"            → compatible (S ⊂ Susan)
-     *   "Juan Manuel Cerundolo" + "J. M. Cerundolo"   → compatible (J ⊂ Juan)
-     *   "Juan Manuel Cerundolo" + "F. Cerundolo"      → NOT compatible (F ≠ J)
-     *   "Lloyd Harris" + "Billy Harris"               → NOT compatible
+     * Two names refer to the same person when:
+     *   - first-name prefix is compatible (Susan ⊃ S, Juan ⊃ J), AND
+     *   - they share at least one full surname/middle-name token (>=3 chars).
+     * The shared-token requirement is what stops the cross-name grouping
+     * from merging false positives like
+     *   "Juan Manuel Cerundolo" + "Juan Manuel Lopez"
+     * (both start with "juan" but no shared 3+ char surname token).
+     *
+     * Examples that DO match:
+     *   "Susan Bandecchi" + "S. Bandecchi"
+     *   "Juan Manuel Cerundolo" + "J. M. Cerundolo"
+     *   "Maiar Sherif Ahmed Abdelaziz" + "M. Sherif"  (share "sherif")
+     *
+     * Examples that DON'T match:
+     *   "Lloyd Harris" + "Billy Harris"
+     *   "Juan Cerundolo" + "Francisco Cerundolo"
      */
     private function arePrefixCompatible(string $aName, string $bName): bool
     {
         $a = $this->firstNamePrefix($aName);
         $b = $this->firstNamePrefix($bName);
         if ($a === '' || $b === '') return false;
-        return str_starts_with($a, $b) || str_starts_with($b, $a);
+        if (!str_starts_with($a, $b) && !str_starts_with($b, $a)) return false;
+
+        // Require a shared full token (length >= 3) beyond the first name.
+        $aTokens = $this->nameTokens($aName);
+        $bTokens = $this->nameTokens($bName);
+        if (empty($aTokens) || empty($bTokens)) return false;
+
+        // Drop the first-name token (it's already prefix-compared).
+        array_shift($aTokens);
+        array_shift($bTokens);
+
+        $shared = array_intersect($aTokens, $bTokens);
+        return !empty($shared);
     }
 
     private function firstNamePrefix(string $name): string
@@ -106,6 +142,26 @@ class TennisDedupePlayers extends Command
         $ascii = preg_replace('/[^a-zA-Z\s.-]/', '', $ascii);
         $first = strtolower(trim(preg_split('/\s+/', ltrim($ascii))[0] ?? ''));
         return rtrim($first, '.');
+    }
+
+    /**
+     * Lowercase, ASCII-normalized tokens from a name, with single-letter
+     * initials and dots stripped. "Juan Manuel Cerundolo" → ['juan', 'manuel',
+     * 'cerundolo']. "M. Sherif" → ['sherif']. Used to find duplicates whose
+     * surname conventions differ between sources.
+     */
+    private function nameTokens(string $name): array
+    {
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', trim($name)) ?: $name;
+        $ascii = preg_replace('/[^a-zA-Z\s.-]/', '', $ascii);
+        $parts = preg_split('/\s+/', strtolower($ascii));
+        $out = [];
+        foreach ($parts as $p) {
+            $p = rtrim($p, '.');
+            if (strlen($p) <= 1) continue; // skip initials like "j", "m"
+            $out[] = $p;
+        }
+        return array_values(array_unique($out));
     }
 
     /**
