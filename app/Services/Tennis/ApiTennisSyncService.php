@@ -490,6 +490,60 @@ class ApiTennisSyncService
                     }
                 }
 
+                // Pass 1.5: NAME-BASED MATCHING for cross-naming duplicates.
+                // When BD has "Pablo Carreno Busta" (id=1513, no api_key) and
+                // api-tennis emits "P. Carreno-Busta" (id=104), Pass 1 fails
+                // because the IDs differ. We catch that here by comparing
+                // names via shared-token heuristics. When we find the slot
+                // AND BD's stored player isn't the same id as ours, we
+                // auto-merge: re-point the slot to the api-tennis canonical
+                // player (the one with api_key) so future syncs match by id.
+                if (!$existing) {
+                    $sameNamePerson = function ($a, $b): bool {
+                        $aTokens = $this->compactTokens($a);
+                        $bTokens = $this->compactTokens($b);
+                        if (empty($aTokens) || empty($bTokens)) return false;
+                        // Must share at least one full token (>=3 chars).
+                        $shared = array_intersect($aTokens, $bTokens);
+                        if (empty($shared)) return false;
+                        // And first-name initial must be compatible.
+                        $aFirst = $aTokens[0] ?? '';
+                        $bFirst = $bTokens[0] ?? '';
+                        if ($aFirst === '' || $bFirst === '') return false;
+                        return str_starts_with($aFirst, $bFirst) || str_starts_with($bFirst, $aFirst);
+                    };
+
+                    foreach ($candidates as $c) {
+                        $matchedByName = false;
+                        $sidesToReassign = []; // [side => $playerToUse]
+
+                        foreach ([['player1', $player1], ['player2', $player2]] as [$ourSide, $ourPlayer]) {
+                            if (!$ourPlayer) continue;
+                            foreach (['player1', 'player2'] as $candSide) {
+                                $candPlayer = $c->{$candSide};
+                                if (!$candPlayer) continue;
+                                if ($candPlayer->id === $ourPlayer->id) continue; // already same
+                                if ($sameNamePerson($candPlayer->name ?? '', $ourPlayer->name ?? '')) {
+                                    $matchedByName = true;
+                                    $sidesToReassign[$candSide . '_id'] = $ourPlayer->id;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if ($matchedByName) {
+                            // Re-point the slot to the canonical (api-tennis)
+                            // player id so future syncs match by id directly.
+                            if (!empty($sidesToReassign)) {
+                                $c->update($sidesToReassign);
+                                $c->refresh();
+                            }
+                            $existing = $c;
+                            break;
+                        }
+                    }
+                }
+
                 // Pass 2: STRUCTURAL placement for R64+ fixtures whose target
                 // slot is still TBD-vs-TBD. We compute where the fixture
                 // belongs by finding the two players in the previous round
@@ -1806,6 +1860,32 @@ class ApiTennisSyncService
         $first = strtolower($tokens[0] ?? '');
         // Drop the trailing "." from initials like "Xin." or "A.".
         return rtrim($first, '.');
+    }
+
+    /**
+     * Lowercase, ASCII-normalized tokens from a name. Hyphens are flattened
+     * to single tokens ("Carreno-Busta" → "carrenobusta") so spelling
+     * variations across data sources still align. Single-letter initials
+     * are dropped. Order preserved (first name first).
+     *
+     * Used by Pass 1.5 of the fixture matcher to recognize cross-naming
+     * duplicates (api-tennis "P. Carreno-Busta" vs BT "Pablo Carreno Busta").
+     */
+    private function compactTokens(string $name): array
+    {
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', trim($name)) ?: $name;
+        // Treat hyphens as part of the same token (Carreno-Busta → Carrenobusta)
+        // because api-tennis uses hyphens, BT does not.
+        $ascii = str_replace('-', '', $ascii);
+        $ascii = preg_replace('/[^a-zA-Z\s.]/', '', $ascii);
+        $parts = preg_split('/\s+/', strtolower($ascii));
+        $out = [];
+        foreach ($parts as $p) {
+            $p = rtrim($p, '.');
+            if (strlen($p) <= 1) continue; // skip initials
+            $out[] = $p;
+        }
+        return array_values($out);
     }
 
     /** Loop syncTournamentLive over every active tournament with an api_tournament_key. */
