@@ -499,18 +499,38 @@ class ApiTennisSyncService
                 // auto-merge: re-point the slot to the api-tennis canonical
                 // player (the one with api_key) so future syncs match by id.
                 if (!$existing) {
+                    // Helper: true if BD's stored name and api-tennis's name
+                    // describe the same person. Two heuristics combined:
+                    //   1) compactTokens drops single-letter initials and
+                    //      splits hyphenated names. The two token lists
+                    //      MUST share at least one token of >= 3 chars
+                    //      that ISN'T a known first-name (the surname-ish
+                    //      tokens are what identifies the same person).
+                    //   2) If both names still have a first-name token,
+                    //      it must be prefix-compatible (Felix ⊃ F).
+                    //      If one name's first-name was an initial that
+                    //      compactTokens dropped, we skip this check —
+                    //      the surname-match is enough.
                     $sameNamePerson = function ($a, $b): bool {
                         $aTokens = $this->compactTokens($a);
                         $bTokens = $this->compactTokens($b);
                         if (empty($aTokens) || empty($bTokens)) return false;
-                        // Must share at least one full token (>=3 chars).
+
                         $shared = array_intersect($aTokens, $bTokens);
                         if (empty($shared)) return false;
-                        // And first-name initial must be compatible.
-                        $aFirst = $aTokens[0] ?? '';
-                        $bFirst = $bTokens[0] ?? '';
-                        if ($aFirst === '' || $bFirst === '') return false;
-                        return str_starts_with($aFirst, $bFirst) || str_starts_with($bFirst, $aFirst);
+
+                        // Try to identify the first-name token in each list.
+                        // If we can extract it from both (i.e. both names have
+                        // at least one token NOT in the shared surname set),
+                        // they must be prefix-compatible.
+                        $aFirst = $this->firstNamePrefix($a);
+                        $bFirst = $this->firstNamePrefix($b);
+                        if ($aFirst !== '' && $bFirst !== ''
+                            && !str_starts_with($aFirst, $bFirst)
+                            && !str_starts_with($bFirst, $aFirst)) {
+                            return false;
+                        }
+                        return true;
                     };
 
                     foreach ($candidates as $c) {
@@ -1863,20 +1883,21 @@ class ApiTennisSyncService
     }
 
     /**
-     * Lowercase, ASCII-normalized tokens from a name. Hyphens are flattened
-     * to single tokens ("Carreno-Busta" → "carrenobusta") so spelling
-     * variations across data sources still align. Single-letter initials
-     * are dropped. Order preserved (first name first).
-     *
-     * Used by Pass 1.5 of the fixture matcher to recognize cross-naming
-     * duplicates (api-tennis "P. Carreno-Busta" vs BT "Pablo Carreno Busta").
+     * Lowercase, ASCII-normalized tokens from a name. Hyphens split into
+     * separate tokens so spelling variations across sources still align:
+     *   "P. Carreno-Busta"          → [carreno, busta]
+     *   "Pablo Carreno Busta"       → [pablo, carreno, busta]
+     *   "F. Auger-Aliassime"        → [auger, aliassime]
+     *   "Felix Auger Aliassime"     → [felix, auger, aliassime]
+     * Single-letter initials are dropped. Used by Pass 1.5 of the fixture
+     * matcher to recognize cross-naming duplicates.
      */
     private function compactTokens(string $name): array
     {
         $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', trim($name)) ?: $name;
-        // Treat hyphens as part of the same token (Carreno-Busta → Carrenobusta)
-        // because api-tennis uses hyphens, BT does not.
-        $ascii = str_replace('-', '', $ascii);
+        // Treat hyphens AS spaces (one of the convention differences
+        // between api-tennis "Auger-Aliassime" and BT "Auger Aliassime").
+        $ascii = str_replace('-', ' ', $ascii);
         $ascii = preg_replace('/[^a-zA-Z\s.]/', '', $ascii);
         $parts = preg_split('/\s+/', strtolower($ascii));
         $out = [];
