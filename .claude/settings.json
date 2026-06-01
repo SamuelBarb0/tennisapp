@@ -5,7 +5,8 @@
       "PowerShell(php -l app\\\\Http\\\\Controllers\\\\Admin\\\\UserController.php)",
       "PowerShell(php -l app\\\\Models\\\\User.php)",
       "PowerShell(php -l app\\\\Console\\\\Commands\\\\TennisInferMissingPicks.php)",
-      "PowerShell(php -l app\\\\Http\\\\Controllers\\\\Admin\\\\TournamentController.php)"
+      "PowerShell(php -l app\\\\Http\\\\Controllers\\\\Admin\\\\TournamentController.php)",
+      "Bash(grep -n 'ensureBracketPlaceholders\\\\|foreach \\($resp' app/Services/Tennis/ApiTennisSyncService.php)"
     ]
   }
 }

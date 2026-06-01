@@ -346,6 +346,16 @@ class ApiTennisSyncService
         // Wrap into the shape the rest of the loop expects.
         $resp = ['result' => array_values($allFixtures)];
 
+        // PRE-DEDUPE: for every player coming in from api-tennis fixtures,
+        // check if there's a same-tour duplicate Player row in BD that
+        // shares the surname and is name-compatible (Felix Auger Aliassime
+        // vs F. Auger-Aliassime). Merge them BEFORE the matching loop so
+        // every slot that refers to the duplicate gets re-pointed to the
+        // canonical (api-tennis) Player id. Without this, the structural
+        // Pass 2 fails: it searches the previous round for the canonical
+        // player_id and misses slots that still hold the duplicate.
+        $this->dedupePlayersForFixtures($resp['result'], $tournament);
+
         $newlyFinished = [];
         $updated = 0;
         $skippedQualy = 0;
@@ -1907,6 +1917,88 @@ class ApiTennisSyncService
             $out[] = $p;
         }
         return array_values($out);
+    }
+
+    /**
+     * For every player referenced in api-tennis fixtures, find same-tour
+     * Player rows in BD that are name-compatible duplicates (Felix Auger
+     * Aliassime vs F. Auger-Aliassime) and merge them into the api-tennis
+     * canonical id. This runs once at the start of every sync so the
+     * downstream matching loop sees a single player_id per real person.
+     */
+    private function dedupePlayersForFixtures(array $fixtures, Tournament $tournament): void
+    {
+        $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
+        $canonicalSeen = []; // api_player_key => canonical Player id
+
+        foreach ($fixtures as $f) {
+            foreach ([
+                ['k' => $f['first_player_key'] ?? null,  'n' => $f['event_first_player'] ?? null],
+                ['k' => $f['second_player_key'] ?? null, 'n' => $f['event_second_player'] ?? null],
+            ] as $side) {
+                $apiKey = $side['k'];
+                $apiName = $side['n'];
+                if (!$apiKey || !$apiName) continue;
+                if (isset($canonicalSeen[$apiKey])) continue;
+
+                $canonical = Player::where('api_player_key', (string) $apiKey)->first();
+                if (!$canonical) continue;
+                $canonicalSeen[$apiKey] = $canonical->id;
+
+                // Look for same-tour candidates that share at least one token
+                // (>= 3 chars) with the canonical and are name-compatible.
+                $tokens = $this->compactTokens($canonical->name ?? '');
+                if (empty($tokens)) continue;
+
+                $candidates = Player::where('category', $tour)
+                    ->where('id', '!=', $canonical->id)
+                    ->where(function ($q) use ($tokens) {
+                        foreach ($tokens as $t) {
+                            if (strlen($t) >= 4) $q->orWhere('name', 'like', '%' . $t . '%');
+                        }
+                    })
+                    ->get();
+
+                foreach ($candidates as $dup) {
+                    $dupTokens = $this->compactTokens($dup->name ?? '');
+                    $shared = array_intersect($tokens, $dupTokens);
+                    if (empty($shared)) continue;
+
+                    // Require first-name compatibility (Felix ⊃ F).
+                    $canFirst = $this->firstNamePrefix($canonical->name ?? '');
+                    $dupFirst = $this->firstNamePrefix($dup->name ?? '');
+                    if ($canFirst !== '' && $dupFirst !== ''
+                        && !str_starts_with($canFirst, $dupFirst)
+                        && !str_starts_with($dupFirst, $canFirst)) {
+                        continue;
+                    }
+
+                    // Found a duplicate. Re-point every FK to the canonical
+                    // and delete the duplicate row.
+                    \Illuminate\Support\Facades\DB::transaction(function () use ($canonical, $dup) {
+                        \Illuminate\Support\Facades\DB::table('matches')->where('player1_id', $dup->id)->update(['player1_id' => $canonical->id]);
+                        \Illuminate\Support\Facades\DB::table('matches')->where('player2_id', $dup->id)->update(['player2_id' => $canonical->id]);
+                        \Illuminate\Support\Facades\DB::table('matches')->where('winner_id', $dup->id)->update(['winner_id' => $canonical->id]);
+                        \Illuminate\Support\Facades\DB::table('bracket_predictions')->where('predicted_winner_id', $dup->id)->update(['predicted_winner_id' => $canonical->id]);
+                        if (\Illuminate\Support\Facades\Schema::hasTable('player_seed_overrides')) {
+                            $dupOv = \Illuminate\Support\Facades\DB::table('player_seed_overrides')->where('player_id', $dup->id)->get();
+                            foreach ($dupOv as $ov) {
+                                $exists = \Illuminate\Support\Facades\DB::table('player_seed_overrides')
+                                    ->where('player_id', $canonical->id)
+                                    ->where('tournament_id', $ov->tournament_id)
+                                    ->exists();
+                                if ($exists) {
+                                    \Illuminate\Support\Facades\DB::table('player_seed_overrides')->where('id', $ov->id)->delete();
+                                } else {
+                                    \Illuminate\Support\Facades\DB::table('player_seed_overrides')->where('id', $ov->id)->update(['player_id' => $canonical->id]);
+                                }
+                            }
+                        }
+                        Player::where('id', $dup->id)->delete();
+                    });
+                }
+            }
+        }
     }
 
     /** Loop syncTournamentLive over every active tournament with an api_tournament_key. */
