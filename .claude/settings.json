@@ -8,7 +8,8 @@
       "PowerShell(php -l app\\\\Http\\\\Controllers\\\\Admin\\\\TournamentController.php)",
       "Bash(grep -n 'ensureBracketPlaceholders\\\\|foreach \\($resp' app/Services/Tennis/ApiTennisSyncService.php)",
       "PowerShell(php -l app\\\\Http\\\\Controllers\\\\HomeController.php)",
-      "PowerShell(php -l app\\\\Http\\\\Requests\\\\ProfileUpdateRequest.php)"
+      "PowerShell(php -l app\\\\Http\\\\Requests\\\\ProfileUpdateRequest.php)",
+      "PowerShell(php -l app\\\\Http\\\\Controllers\\\\RankingController.php)"
     ]
   }
 }

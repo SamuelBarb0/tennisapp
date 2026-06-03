@@ -26,7 +26,7 @@ class RankingController extends Controller
         foreach ($tournaments as $tournament) {
             // Full ranking with manual_rank as secondary sort (so admin tiebreaks apply)
             $allUsers = User::select(
-                    'users.id', 'users.name',
+                    'users.id', 'users.name', 'users.last_name',
                     DB::raw('SUM(bracket_predictions.points_earned) as tournament_points'),
                     DB::raw('COUNT(bracket_predictions.id) as total_predictions'),
                     DB::raw('SUM(CASE WHEN bracket_predictions.is_correct = 1 THEN 1 ELSE 0 END) as correct_predictions'),
@@ -38,7 +38,7 @@ class RankingController extends Controller
                       ->where('tournament_tiebreaks.tournament_id', '=', $tournament->id);
                 })
                 ->where('bracket_predictions.tournament_id', $tournament->id)
-                ->groupBy('users.id', 'users.name', 'tournament_tiebreaks.manual_rank')
+                ->groupBy('users.id', 'users.name', 'users.last_name', 'tournament_tiebreaks.manual_rank')
                 ->having('tournament_points', '>', 0)
                 ->orderByDesc('tournament_points')
                 ->orderBy('manual_rank')

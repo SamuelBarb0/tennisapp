@@ -293,7 +293,7 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="text-xs font-semibold text-gray-800 truncate">
-                                {{ $ru->name }}
+                                {{ trim($ru->name . ' ' . ($ru->last_name ?? '')) }}
                                 @if($isMe)<span class="ml-1 px-1 py-0.5 rounded bg-tc-primary/10 text-tc-primary text-[8px] font-bold">TÚ</span>@endif
                             </div>
                             <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $accuracy }}% aciertos</div>
@@ -301,7 +301,7 @@
                         <div class="w-14 text-right shrink-0">
                             <div class="text-xs font-black text-tc-primary tabular-nums font-mono">{{ number_format($ru->tournament_points) }}</div>
                         </div>
-                        <div class="w-6 text-center shrink-0 text-gray-300 group-hover:text-tc-primary transition" title="Ver bracket de {{ $ru->name }}">
+                        <div class="w-6 text-center shrink-0 text-gray-300 group-hover:text-tc-primary transition" title="Ver bracket de {{ trim($ru->name . ' ' . ($ru->last_name ?? '')) }}">
                             <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                         </div>
                     </a>
@@ -331,7 +331,7 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="text-xs font-semibold text-gray-800 truncate">
-                                {{ $currentUser->name }}
+                                {{ trim($currentUser->name . ' ' . ($currentUser->last_name ?? '')) }}
                                 <span class="ml-1 px-1 py-0.5 rounded bg-tc-primary/10 text-tc-primary text-[8px] font-bold">TÚ</span>
                             </div>
                             <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $myAccuracy }}% aciertos</div>
@@ -369,7 +369,7 @@
                             </div>
                             <div class="flex-1 min-w-0">
                                 <div class="text-xs font-semibold text-gray-800 truncate">
-                                    {{ $ru->name }}
+                                    {{ trim($ru->name . ' ' . ($ru->last_name ?? '')) }}
                                     @if($isMe)<span class="ml-1 px-1 py-0.5 rounded bg-tc-primary/10 text-tc-primary text-[8px] font-bold">TÚ</span>@endif
                                 </div>
                                 <div class="text-[9px] text-gray-400 font-mono tabular-nums">{{ $accuracy }}% aciertos</div>
