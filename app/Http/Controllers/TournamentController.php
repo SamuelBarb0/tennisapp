@@ -222,16 +222,26 @@ class TournamentController extends Controller
         // torneo"). This gives the user a clear visual buffer ("Cierra 03:59"
         // when the first match is at 04:00) and avoids the awkward case where
         // the cutoff and the match start at the exact same minute.
+        // Deadline strategy:
+        //   1. First match's scheduled_at - 1 min (canonical cutoff once
+        //      the bracket has been published).
+        //   2. Fallback to tournament.start_date - 1 min when there are no
+        //      matches yet (the bracket hasn't been bootstrapped). Without
+        //      this fallback, a tournament with no matches looks "already
+        //      started" forever, blocking checkout for premium upcoming
+        //      tournaments like Wimbledon a month before day 1.
         $firstMatch = $tournament->matches()
             ->whereNotIn('status', ['cancelled'])
             ->whereNotNull('scheduled_at')
             ->orderBy('scheduled_at')
             ->first();
-        $isFinished       = $tournament->status === 'finished';
-        $lockDate         = $isFinished ? null : $firstMatch?->scheduled_at?->copy()->subMinute();
+        $isFinished = $tournament->status === 'finished';
+        $lockDate   = $isFinished
+            ? null
+            : ($firstMatch?->scheduled_at?->copy()->subMinute()
+                ?? $tournament->start_date?->copy()->subMinute());
         $predictionsLocked = $isFinished
-            || !$firstMatch
-            || now()->gte($lockDate);
+            || ($lockDate && now()->gte($lockDate));
 
         // Bracket predictions for the viewing user (self or another user's, if requested)
         $userBracketPicks = collect();

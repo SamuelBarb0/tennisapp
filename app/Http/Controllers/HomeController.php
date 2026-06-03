@@ -42,15 +42,21 @@ class HomeController extends Controller
             ->unique()
             ->all();
 
+        // "Próximos torneos a predecir" must show tournaments that still
+        // accept predictions:
+        //   - status must be 'upcoming' (in_progress and finished are out:
+        //     once Roland Garros starts it's no longer "próximo"),
+        //   - whereHas('matches') is NOT required, because Wimbledon a month
+        //     before day 1 has no bootstrapped bracket yet but the admin
+        //     still wants to surface it so users can pay early.
         $featuredTournaments = Tournament::where('is_active', true)
-            ->where('status', '!=', 'finished')
+            ->where('status', 'upcoming')
             ->where(function ($q) use ($featuredFamilies) {
                 $q->where('featured_on_home', true);
                 if (!empty($featuredFamilies)) {
                     $q->orWhereIn('family_slug', $featuredFamilies);
                 }
             })
-            ->whereHas('matches')
             ->withCount(['matches as pending_matches_count' => function ($q) {
                 $q->where('status', 'pending');
             }])
@@ -58,14 +64,13 @@ class HomeController extends Controller
             ->get();
 
         if ($featuredTournaments->isEmpty()) {
+            // Same rule as the primary query: status=upcoming only.
             $featuredTournaments = Tournament::where('is_active', true)
-                ->where('status', '!=', 'finished')
-                ->where('start_date', '>=', '2026-01-01')
-                ->whereHas('matches')
+                ->where('status', 'upcoming')
+                ->where('start_date', '>=', now()->subDays(7))
                 ->withCount(['matches as pending_matches_count' => function ($q) {
                     $q->where('status', 'pending');
                 }])
-                ->having('pending_matches_count', '>', 0)
                 ->orderBy('start_date')
                 ->take(2)
                 ->get();

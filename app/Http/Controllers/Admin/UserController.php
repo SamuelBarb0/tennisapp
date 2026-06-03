@@ -135,7 +135,11 @@ class UserController extends Controller
             'phone'        => ['nullable', 'string', 'max:32'],
             'city'         => ['nullable', 'string', 'max:120'],
             'country_code' => ['nullable', 'string', 'size:2'],
+            'birth_date'   => ['nullable', 'date'],
         ]);
+        if (!empty($data['country_code'])) {
+            $data['country_code'] = strtoupper($data['country_code']);
+        }
         $user->update($data);
         return back()->with('success', 'Usuario actualizado.');
     }

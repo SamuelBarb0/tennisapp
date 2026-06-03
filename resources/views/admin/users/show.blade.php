@@ -13,15 +13,36 @@
         <div class="w-16 h-16 bg-tc-primary rounded-2xl flex items-center justify-center text-white text-2xl font-bold">{{ strtoupper(substr($user->name, 0, 1)) }}</div>
         <div class="flex-1">
             <div class="flex items-center gap-3 mb-1">
-                <h3 class="text-lg font-bold">{{ $user->name }}</h3>
+                <h3 class="text-lg font-bold">{{ trim($user->name . ' ' . $user->last_name) }}</h3>
                 @if($user->is_blocked)
                     <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-600">Bloqueado</span>
                 @else
                     <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-600">Activo</span>
                 @endif
+                @if($user->is_admin)
+                    <span class="px-2.5 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-600">Admin</span>
+                @endif
             </div>
             <p class="text-sm text-gray-500">{{ $user->email }}</p>
-            <p class="text-xs text-gray-400 mt-1">Registrado: {{ $user->created_at->bogota()->format('d/m/Y H:i') }}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 mt-3 text-xs">
+                @if($user->phone)
+                    <div><span class="text-gray-400">Celular:</span> <span class="text-gray-700 font-medium">{{ $user->phone }}</span></div>
+                @endif
+                @if($user->city)
+                    <div><span class="text-gray-400">Ciudad:</span> <span class="text-gray-700 font-medium">{{ $user->city }}</span></div>
+                @endif
+                @if($user->country_code)
+                    <div><span class="text-gray-400">País:</span> <span class="text-gray-700 font-medium">{{ $user->country_code }}</span></div>
+                @endif
+                @if($user->birth_date)
+                    @php
+                        $bd = \Carbon\Carbon::parse($user->birth_date);
+                        $age = $bd->diffInYears(now());
+                    @endphp
+                    <div><span class="text-gray-400">Nacimiento:</span> <span class="text-gray-700 font-medium">{{ $bd->format('d/m/Y') }} ({{ $age }} años)</span></div>
+                @endif
+                <div><span class="text-gray-400">Registrado:</span> <span class="text-gray-700 font-medium">{{ $user->created_at->bogota()->format('d/m/Y H:i') }}</span></div>
+            </div>
         </div>
         <div class="flex flex-wrap gap-2" x-data="{ panel: null }">
             <form action="{{ route('admin.users.toggle-block', $user) }}" method="POST">
@@ -69,11 +90,34 @@
             <div x-show="panel === 'edit'" x-cloak class="basis-full mt-3">
                 <form action="{{ route('admin.users.update', $user) }}" method="POST" class="grid grid-cols-2 gap-2 bg-gray-50 p-3 rounded-xl">
                     @csrf @method('PATCH')
-                    <input type="text" name="name" placeholder="Nombre" value="{{ $user->name }}" required class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
-                    <input type="text" name="last_name" placeholder="Apellido" value="{{ $user->last_name }}" class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
-                    <input type="email" name="email" placeholder="Email" value="{{ $user->email }}" required class="px-3 py-2 text-sm border border-gray-200 rounded-lg col-span-2">
-                    <input type="text" name="phone" placeholder="Celular" value="{{ $user->phone }}" class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
-                    <input type="text" name="city" placeholder="Ciudad" value="{{ $user->city }}" class="px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Nombre</label>
+                        <input type="text" name="name" value="{{ $user->name }}" required class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Apellido</label>
+                        <input type="text" name="last_name" value="{{ $user->last_name }}" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs text-gray-600 mb-1">Email</label>
+                        <input type="email" name="email" value="{{ $user->email }}" required class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Celular</label>
+                        <input type="text" name="phone" value="{{ $user->phone }}" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Ciudad</label>
+                        <input type="text" name="city" value="{{ $user->city }}" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">País (código ISO-2)</label>
+                        <input type="text" name="country_code" value="{{ $user->country_code }}" maxlength="2" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg uppercase">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Fecha de nacimiento</label>
+                        <input type="date" name="birth_date" value="{{ $user->birth_date ? \Carbon\Carbon::parse($user->birth_date)->format('Y-m-d') : '' }}" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg">
+                    </div>
                     <button class="col-span-2 px-4 py-2 text-sm font-bold text-white bg-tc-primary rounded-lg hover:bg-tc-primary/90">Guardar cambios</button>
                 </form>
             </div>

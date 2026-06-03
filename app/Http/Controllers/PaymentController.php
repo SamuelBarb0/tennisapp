@@ -31,15 +31,23 @@ class PaymentController extends Controller
         // Block checkout if the tournament has already started — there's no
         // way for the user to fill the bracket after the first match begins,
         // so charging them would be a guaranteed refund request.
+        //
+        // Deadline strategy:
+        //   1. First match's scheduled_at - 1 min (the canonical cutoff).
+        //   2. Fallback to tournament.start_date - 1 min when there are no
+        //      matches yet (bracket not published — Wimbledon a month before
+        //      its first day, etc.).
+        //   3. If neither exists, allow the checkout: the tournament is
+        //      genuinely upcoming and the bracket will appear later.
         $firstMatch = $tournament->matches()
             ->whereNotIn('status', ['cancelled'])
             ->whereNotNull('scheduled_at')
             ->orderBy('scheduled_at')
             ->first();
-        $deadline = $firstMatch?->scheduled_at?->copy()->subMinute();
+        $deadline = $firstMatch?->scheduled_at?->copy()->subMinute()
+            ?? $tournament->start_date?->copy()->subMinute();
         $alreadyStarted = $tournament->status === 'finished'
-            || !$firstMatch
-            || now()->gte($deadline);
+            || ($deadline && now()->gte($deadline));
         if ($alreadyStarted) {
             return redirect()->route('tournaments.show', $tournament)
                 ->with('error', 'Este torneo ya cerró las predicciones — no es posible pagar para participar ahora.');
