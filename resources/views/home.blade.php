@@ -392,7 +392,7 @@
                         {{ strtoupper(substr($ru->name, 0, 1)) }}
                     </div>
                     <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium truncate">{{ $ru->name }}</div>
+                        <div class="text-sm font-medium truncate">{{ trim($ru->name . ' ' . ($ru->last_name ?? '')) }}</div>
                         <div class="text-[10px] text-gray-400">{{ $ru->correct_count }} aciertos</div>
                     </div>
                     <div class="text-sm font-bold text-tc-primary">{{ number_format($ru->tournament_points) }} pts</div>

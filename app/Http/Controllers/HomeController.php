@@ -84,20 +84,22 @@ class HomeController extends Controller
         // Backwards-compat for sections still expecting nextTournament
         $nextTournament = $featuredTournaments->first();
 
-        // Próximos torneos (con partidos, excluyendo los destacados Y los terminados).
-        // groupByFamily() collapses ATP+WTA siblings into one card but only the
-        // primary's id ends up in ->pluck('id'). We pull the sibling IDs from
-        // `family_ids` (set by groupByFamily) so the other half of a family
-        // doesn't reappear as its own card below.
+        // Próximos torneos (excluyendo los destacados, los que ya iniciaron
+        // y los terminados). Regla del cliente: si las predicciones del
+        // torneo ya están cerradas (status=in_progress o finished), no se
+        // muestra como "próximo a predecir" — solo torneos en estado
+        // 'upcoming' donde el usuario todavía puede llenar el bracket.
+        //
+        // groupByFamily() collapses ATP+WTA siblings into one card but only
+        // the primary's id ends up in ->pluck('id'). We pull the sibling
+        // IDs from `family_ids` (set by groupByFamily) so the other half of
+        // a family doesn't reappear as its own card below.
         $featuredIds = $featuredTournaments
             ->flatMap(fn($t) => $t->family_ids ?? [$t->id])
             ->unique()
             ->all();
         $upcomingTournaments = Tournament::where('is_active', true)
-            ->where('status', '!=', 'finished')
-            ->where('start_date', '>=', '2026-01-01')
-            ->where('end_date', '>=', now()->subDays(7))
-            ->whereHas('matches')
+            ->where('status', 'upcoming')
             ->withCount(['matches as pending_matches_count' => function ($q) {
                 $q->where('status', 'pending');
             }])
@@ -137,13 +139,13 @@ class HomeController extends Controller
         $tournamentRankings = [];
         foreach ($activeTournaments as $at) {
             $ranking = User::select(
-                    'users.id', 'users.name',
+                    'users.id', 'users.name', 'users.last_name',
                     DB::raw('SUM(bracket_predictions.points_earned) as tournament_points'),
                     DB::raw('SUM(CASE WHEN bracket_predictions.is_correct = 1 THEN 1 ELSE 0 END) as correct_count')
                 )
                 ->join('bracket_predictions', 'users.id', '=', 'bracket_predictions.user_id')
                 ->where('bracket_predictions.tournament_id', $at->id)
-                ->groupBy('users.id', 'users.name')
+                ->groupBy('users.id', 'users.name', 'users.last_name')
                 ->having('tournament_points', '>', 0)
                 ->orderByDesc('tournament_points')
                 ->take(5)
