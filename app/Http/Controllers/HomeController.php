@@ -127,7 +127,11 @@ class HomeController extends Controller
             ->take(6)
             ->get();
 
-        // Rankings per active tournament (instead of general ranking)
+        // Rankings per tournament: prefer currently active (in_progress / live)
+        // tournaments, but if there aren't any, fall back to the most recently
+        // finished one(s) so the section stays populated during the gap
+        // between two tournaments (e.g. between Roland Garros ending and
+        // Wimbledon starting). Otherwise the section reads as empty.
         $activeTournaments = Tournament::where('is_active', true)
             ->where('start_date', '>=', '2026-01-01')
             ->whereIn('status', ['in_progress', 'live'])
@@ -135,6 +139,16 @@ class HomeController extends Controller
             ->orderBy('start_date')
             ->take(4)
             ->get();
+
+        if ($activeTournaments->isEmpty()) {
+            $activeTournaments = Tournament::where('is_active', true)
+                ->where('start_date', '>=', '2026-01-01')
+                ->where('status', 'finished')
+                ->whereHas('matches')
+                ->orderByDesc('end_date')
+                ->take(2)
+                ->get();
+        }
 
         $tournamentRankings = [];
         foreach ($activeTournaments as $at) {

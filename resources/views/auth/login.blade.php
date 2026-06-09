@@ -10,6 +10,12 @@
         </div>
     @endif
 
+    @if (session('info'))
+        <div class="mb-4 px-4 py-3 rounded-xl bg-amber-50 text-amber-800 text-sm font-medium border border-amber-200">
+            {{ session('info') }}
+        </div>
+    @endif
+
     <form method="POST" action="{{ route('login') }}" class="space-y-4" x-data="{ pw: false }">
         @csrf
 

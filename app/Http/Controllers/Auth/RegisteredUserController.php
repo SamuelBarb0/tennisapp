@@ -32,6 +32,19 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        // If the email is already registered, redirect to login with a clear
+        // message instead of dropping the user back on the empty register form
+        // with a small inline error they'll miss. Triggers on a basic email
+        // shape check so we don't accidentally short-circuit other validation
+        // (missing name, weak password) for non-existing emails.
+        $emailInput = strtolower(trim((string) $request->input('email', '')));
+        if ($emailInput && filter_var($emailInput, FILTER_VALIDATE_EMAIL)
+            && User::where('email', $emailInput)->exists()) {
+            return redirect()->route('login')
+                ->withInput(['email' => $emailInput])
+                ->with('info', 'Ya tienes una cuenta con este correo. Inicia sesión para continuar.');
+        }
+
         $request->validate([
             'name'         => ['required', 'string', 'max:120'],
             'last_name'    => ['required', 'string', 'max:120'],

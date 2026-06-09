@@ -204,7 +204,17 @@ class Tournament extends Model
             ->orderBy('scheduled_at')
             ->first();
 
-        if (!$first) return 'unavailable';
+        // No matches loaded yet (BT hasn't published the bracket) — fall back
+        // to the tournament's own start_date. An upcoming tournament whose
+        // start_date is still in the future should be marked 'open' so users
+        // can land on the tournament page and start the payment flow even
+        // before the bracket is bootstrapped.
+        if (!$first) {
+            if ($this->start_date && now()->lt($this->start_date)) {
+                return 'open';
+            }
+            return 'unavailable';
+        }
         if (now()->gte($first->scheduled_at)) return 'live';
 
         // Bracket is "open" when at least one match in the earliest round has two
