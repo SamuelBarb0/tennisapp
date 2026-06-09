@@ -1,20 +1,20 @@
-<x-mail-layout preview="{{ $tournament->name }} terminó · Tu posición: #{{ $position }}">
+<x-mail-layout preview="Resumen de {{ $tournament->name }} - Posicion {{ $position }}">
     @if($position === 1)
         <div style="display:inline-block; padding:6px 14px; background:#fef3c7; color:#854d0e; border-radius:9999px; font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:16px;">
-            🏆 ¡Campeón!
+            Primer lugar
         </div>
     @elseif($position <= 3)
         <div style="display:inline-block; padding:6px 14px; background:#fef9c3; color:#854d0e; border-radius:9999px; font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:16px;">
-            🥇 Top 3
+            Top 3
         </div>
     @else
         <div style="display:inline-block; padding:6px 14px; background:#e0e7ff; color:#3730a3; border-radius:9999px; font-size:11px; font-weight:800; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:16px;">
-            🎾 Torneo cerrado
+            Torneo finalizado
         </div>
     @endif
 
     <h1 style="margin:0 0 12px 0; color:#0f3460; font-size:24px; font-weight:800;">
-        {{ $tournament->name }} terminó
+        {{ $tournament->name }} ya terminó
     </h1>
 
     <p style="margin:0 0 20px 0;">
@@ -45,7 +45,7 @@
     @if($prize)
         <div style="background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); border-radius:12px; padding:20px; margin:20px 0; text-align:center;">
             <div style="font-size:11px; font-weight:800; letter-spacing:1px; color:#7c2d12; text-transform:uppercase; margin-bottom:6px;">
-                🎁 Tu premio
+                Tu reconocimiento
             </div>
             <div style="font-size:18px; font-weight:800; color:#7c2d12;">
                 {{ $prize }}

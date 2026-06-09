@@ -27,9 +27,12 @@ class TournamentClosedMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $emoji = $this->position === 1 ? '🏆' : ($this->position <= 3 ? '🥇' : '🎾');
+        // Subject deliberately plain (no emoji, no "#", no exclamation):
+        // Hotmail/Outlook spam filters penalize emoji + numbers + punctuation
+        // in subjects as a marketing-style pattern. Keep it descriptive but
+        // simple.
         return new Envelope(
-            subject: "{$emoji} {$this->tournament->name} terminó · #{$this->position}",
+            subject: "Resumen de {$this->tournament->name} - Posicion {$this->position}",
         );
     }
 
