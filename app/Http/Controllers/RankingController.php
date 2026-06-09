@@ -10,7 +10,12 @@ class RankingController extends Controller
 {
     public function index()
     {
-        // Show only NON-finished tournaments (per spec: hide finalized ones)
+        // Prefer currently active tournaments (in_progress / live). If
+        // there aren't any active right now, fall back to the most
+        // recently finished tournament(s) so the page doesn't read as
+        // empty between two events (e.g. between Roland Garros ending
+        // and Wimbledon starting). The client wants the last-played
+        // tournament's ranking to stay visible during that gap.
         $tournaments = Tournament::where('is_active', true)
             ->where('start_date', '>=', '2026-01-01')
             ->where(function ($q) {
@@ -20,6 +25,16 @@ class RankingController extends Controller
             ->whereHas('matches')
             ->orderByDesc('start_date')
             ->get();
+
+        if ($tournaments->isEmpty()) {
+            $tournaments = Tournament::where('is_active', true)
+                ->where('start_date', '>=', '2026-01-01')
+                ->where('status', 'finished')
+                ->whereHas('matches')
+                ->orderByDesc('end_date')
+                ->take(2)
+                ->get();
+        }
 
         $tournamentRankings = [];
 
