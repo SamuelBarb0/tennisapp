@@ -11,7 +11,12 @@
       "PowerShell(php -l app\\\\Http\\\\Requests\\\\ProfileUpdateRequest.php)",
       "PowerShell(php -l app\\\\Http\\\\Controllers\\\\RankingController.php)",
       "PowerShell(php -l app\\\\Http\\\\Controllers\\\\Auth\\\\RegisteredUserController.php)",
-      "PowerShell(php -l app\\\\Mail\\\\TournamentClosedMail.php)"
+      "PowerShell(php -l app\\\\Mail\\\\TournamentClosedMail.php)",
+      "Bash(cat > *)",
+      "PowerShell(cd c:\\\\xampp\\\\htdocs\\\\tennisapp; php artisan tinker --execute=\"\\\\$t = App\\\\Models\\\\Tournament::where\\('name','Wimbledon'\\)->where\\('slug','like','%wta%'\\)->first\\(\\); if\\(!\\\\$t\\){ \\\\$t = App\\\\Models\\\\Tournament::where\\('name','Wimbledon'\\)->get\\(\\); echo json_encode\\(App\\\\Models\\\\Tournament::where\\('name','like','%Wimbledon%'\\)->get\\(['id','name','slug','type','api_tournament_key','tennisexplorer_slug']\\)\\); } else { echo 'FOUND '.\\\\$t->id.' '.\\\\$t->slug; }\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\elbub\\AppData\\Local\\Temp\\claude\\c--xampp-htdocs-tennisapp\\8445dadb-541e-4fde-a3f0-d74184de6ff3\\scratchpad"
     ]
   }
 }

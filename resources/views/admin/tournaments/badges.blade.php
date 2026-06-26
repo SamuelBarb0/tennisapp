@@ -27,6 +27,11 @@
             La marca se aplica al iniciar la primera ronda y se propaga sola a las rondas siguientes cuando el jugador avanza.
             Deja en blanco si no aplica.
         </p>
+        <p class="text-blue-800/80 mt-2">
+            <strong>Bandera:</strong> si un jugador muestra la bandera equivocada (o ninguna), elige el país correcto en el
+            selector junto a su nombre. El cambio corrige la bandera del jugador en <strong>todos</strong> los torneos.
+            Deja en <em>“— Mantener —”</em> para no tocarla.
+        </p>
     </div>
 
     <form method="POST" action="{{ route('admin.tournaments.badges.update', $tournament) }}">
@@ -63,6 +68,13 @@
                                     <img src="{{ $match->player1->flag_url }}" alt="" class="w-4 h-3 rounded-sm shrink-0">
                                     <span class="font-medium">{{ $match->player1->name }}</span>
                                 </div>
+                                <select name="flags[{{ $match->player1_id }}]"
+                                        class="mt-1 w-44 px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+                                    <option value="">— Mantener ({{ strtoupper($match->player1->iso2) }}) —</option>
+                                    @foreach($countries as $iso2 => $cname)
+                                    <option value="{{ $iso2 }}" @selected($match->player1->iso2 === $iso2)>{{ $cname }}</option>
+                                    @endforeach
+                                </select>
                                 @else
                                 <span class="text-gray-300 italic text-xs">Por definir</span>
                                 @endif
@@ -83,6 +95,13 @@
                                     <img src="{{ $match->player2->flag_url }}" alt="" class="w-4 h-3 rounded-sm shrink-0">
                                     <span class="font-medium">{{ $match->player2->name }}</span>
                                 </div>
+                                <select name="flags[{{ $match->player2_id }}]"
+                                        class="mt-1 w-44 px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-tc-primary focus:border-transparent outline-none">
+                                    <option value="">— Mantener ({{ strtoupper($match->player2->iso2) }}) —</option>
+                                    @foreach($countries as $iso2 => $cname)
+                                    <option value="{{ $iso2 }}" @selected($match->player2->iso2 === $iso2)>{{ $cname }}</option>
+                                    @endforeach
+                                </select>
                                 @else
                                 <span class="text-gray-300 italic text-xs">Por definir</span>
                                 @endif

@@ -169,7 +169,43 @@ class TournamentController extends Controller
             ->get()
             ->keyBy('player_id');
 
-        return view('admin.tournaments.badges', compact('tournament', 'matches', 'overrides', 'startingRound'));
+        $countries = self::flagCountries();
+
+        return view('admin.tournaments.badges', compact('tournament', 'matches', 'overrides', 'startingRound', 'countries'));
+    }
+
+    /**
+     * ISO alpha-2 → display name list for the flag selector on the Marcas page.
+     * Restricted to the codes flagcdn.com serves (matches Player::getIso2Attribute).
+     * Sorted by display name for a friendly dropdown.
+     */
+    public static function flagCountries(): array
+    {
+        $list = [
+            'ad'=>'Andorra','ae'=>'Emiratos Árabes Unidos','ao'=>'Angola','ar'=>'Argentina',
+            'am'=>'Armenia','au'=>'Australia','at'=>'Austria','bb'=>'Barbados','by'=>'Bielorrusia',
+            'be'=>'Bélgica','bj'=>'Benín','bm'=>'Bermudas','ba'=>'Bosnia y Herzegovina','bo'=>'Bolivia',
+            'br'=>'Brasil','bg'=>'Bulgaria','bf'=>'Burkina Faso','kh'=>'Camboya','ca'=>'Canadá',
+            'cl'=>'Chile','cn'=>'China','co'=>'Colombia','cr'=>'Costa Rica','hr'=>'Croacia',
+            'cy'=>'Chipre','cz'=>'Chequia','dk'=>'Dinamarca','do'=>'República Dominicana','ec'=>'Ecuador',
+            'eg'=>'Egipto','es'=>'España','ee'=>'Estonia','fj'=>'Fiyi','fi'=>'Finlandia','fr'=>'Francia',
+            'gb'=>'Reino Unido','ge'=>'Georgia','de'=>'Alemania','gh'=>'Ghana','gr'=>'Grecia',
+            'gt'=>'Guatemala','hn'=>'Honduras','hu'=>'Hungría','in'=>'India','ir'=>'Irán','ie'=>'Irlanda',
+            'il'=>'Israel','it'=>'Italia','ci'=>'Costa de Marfil','jm'=>'Jamaica','jo'=>'Jordania',
+            'jp'=>'Japón','kz'=>'Kazajistán','ke'=>'Kenia','kr'=>'Corea del Sur','kp'=>'Corea del Norte',
+            'xk'=>'Kosovo','kw'=>'Kuwait','lv'=>'Letonia','lb'=>'Líbano','li'=>'Liechtenstein',
+            'lt'=>'Lituania','lu'=>'Luxemburgo','my'=>'Malasia','md'=>'Moldavia','mx'=>'México',
+            'me'=>'Montenegro','mc'=>'Mónaco','ma'=>'Marruecos','nl'=>'Países Bajos','np'=>'Nepal',
+            'nz'=>'Nueva Zelanda','ni'=>'Nicaragua','no'=>'Noruega','pk'=>'Pakistán','py'=>'Paraguay',
+            'pe'=>'Perú','ph'=>'Filipinas','pl'=>'Polonia','pt'=>'Portugal','pr'=>'Puerto Rico',
+            'ro'=>'Rumania','ru'=>'Rusia','za'=>'Sudáfrica','sa'=>'Arabia Saudita','sn'=>'Senegal',
+            'sg'=>'Singapur','si'=>'Eslovenia','rs'=>'Serbia','ch'=>'Suiza','sk'=>'Eslovaquia',
+            'se'=>'Suecia','sy'=>'Siria','th'=>'Tailandia','tw'=>'Taipéi Chino','tn'=>'Túnez',
+            'tr'=>'Turquía','ua'=>'Ucrania','uy'=>'Uruguay','us'=>'Estados Unidos','uz'=>'Uzbekistán',
+            've'=>'Venezuela','vn'=>'Vietnam','zw'=>'Zimbabue',
+        ];
+        asort($list);
+        return $list;
     }
 
     public function updateBadges(Request $request, Tournament $tournament)
@@ -177,7 +213,36 @@ class TournamentController extends Controller
         $data = $request->validate([
             'badges'           => 'nullable|array',
             'badges.*'         => 'nullable|string|max:8',
+            'flags'            => 'nullable|array',
+            'flags.*'          => 'nullable|string|max:2',
         ]);
+
+        // ── Flag (country) overrides ───────────────────────────────────────
+        // The flag a player shows is derived from their nationality_code (see
+        // Player::getIso2Attribute). When api-tennis / bracket.tennis leave it
+        // blank or wrong (e.g. Serena Williams showing the "unknown" flag),
+        // the admin can pick the correct country here. We write it straight to
+        // the player record so the right flag shows in EVERY tournament — a
+        // player's nationality doesn't change per event. Stored as the ISO
+        // alpha-2 code flagcdn expects, so getIso2Attribute's 2-letter fast
+        // path returns it untouched.
+        $flags = $data['flags'] ?? [];
+        $validIso2 = array_keys(self::flagCountries());
+        foreach ($flags as $playerId => $iso2) {
+            $iso2 = strtolower(trim((string) $iso2));
+            if ($iso2 === '' || !in_array($iso2, $validIso2, true)) {
+                continue; // blank = leave the current value as-is
+            }
+            $player = \App\Models\Player::find((int) $playerId);
+            if ($player && strtolower((string) $player->nationality_code) !== $iso2) {
+                $player->update([
+                    'nationality_code' => $iso2,
+                    // Keep `country` readable if it was empty/Unknown.
+                    'country' => (!$player->country || $player->country === 'Unknown')
+                        ? strtoupper($iso2) : $player->country,
+                ]);
+            }
+        }
 
         $badges = $data['badges'] ?? [];
 
