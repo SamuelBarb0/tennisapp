@@ -1484,14 +1484,24 @@ class ApiTennisSyncService
             if ($existing) {
                 $updates = [];
 
-                // A slot can be refilled in two cases:
+                // A slot can be refilled in three cases:
                 //   (a) it holds a placeholder (TBD / Qualifier / LL / Lucky
                 //       Loser) and BT has confirmed a real player,
                 //   (b) it holds the WRONG sibling — same surname as BT, but
                 //       a different first name. This happens when the old
                 //       single-char fuzzy matcher picked the wrong sibling
                 //       (Xin. Wang appearing in Xiyu Wang's slot, etc.).
-                // Real players that genuinely match BT are never overwritten.
+                //   (c) it holds a DIFFERENT person than BT now shows AND the
+                //       match has no result yet. This heals late draw changes
+                //       where one entrant is replaced by another person —
+                //       e.g. BT updated Fonseca's R128 opponent from
+                //       "Carballes Baena" to "Bautista Agut", but the stale
+                //       bootstrap kept Carballes (different surname, so (b)
+                //       didn't catch it) and the played result never landed
+                //       because api-tennis only knows Bautista.
+                // Real players that genuinely match BT are never overwritten,
+                // and a slot that already has a finished/bye result is never
+                // touched (we don't rewrite history).
                 $p1IsPlaceholder = in_array($existing->player1_id, $placeholderIds, true);
                 $p2IsPlaceholder = in_array($existing->player2_id, $placeholderIds, true);
 
@@ -1502,10 +1512,20 @@ class ApiTennisSyncService
                     && $existing->player2
                     && $this->isWrongSiblingFor($existing->player2, $entry['p2']);
 
-                if (($p1IsPlaceholder || $p1IsWrongSibling) && !in_array($p1->id, $placeholderIds, true)) {
+                // Case (c): only on a pending slot (no locked result), and only
+                // when BT shows a genuinely different person (surnames differ).
+                $resultLocked = in_array($existing->status, ['finished', 'bye'], true);
+                $p1IsDifferentPerson = !$resultLocked && !$p1IsPlaceholder && !$p1IsWrongSibling
+                    && $existing->player1 && !$p1IsBye
+                    && $this->isDifferentPersonFrom($existing->player1, $entry['p1']);
+                $p2IsDifferentPerson = !$resultLocked && !$p2IsPlaceholder && !$p2IsWrongSibling
+                    && $existing->player2 && !$p2IsBye
+                    && $this->isDifferentPersonFrom($existing->player2, $entry['p2']);
+
+                if (($p1IsPlaceholder || $p1IsWrongSibling || $p1IsDifferentPerson) && !in_array($p1->id, $placeholderIds, true)) {
                     $updates['player1_id'] = $p1->id;
                 }
-                if (($p2IsPlaceholder || $p2IsWrongSibling) && !in_array($p2->id, $placeholderIds, true)) {
+                if (($p2IsPlaceholder || $p2IsWrongSibling || $p2IsDifferentPerson) && !in_array($p2->id, $placeholderIds, true)) {
                     $updates['player2_id'] = $p2->id;
                 }
 
@@ -1661,6 +1681,25 @@ class ApiTennisSyncService
         $btFirst  = $this->firstNamePrefix($btName);
         if ($dbPrefix === '' || $btFirst === '') return false;
         return !str_starts_with($btFirst, $dbPrefix);
+    }
+
+    /**
+     * Decide whether the Player in a slot is a DIFFERENT PERSON than the one
+     * bracket.tennis now shows there — i.e. their SURNAMES differ. Used by the
+     * bootstrap to heal late draw changes where an entrant is replaced by
+     * someone else (Carballes Baena → Bautista Agut for Fonseca's R128).
+     *
+     * Surname-difference is the conservative signal: same-surname mismatches
+     * are siblings/spelling variants and handled by isWrongSiblingFor, never
+     * here. Returns false for Bye / empty names so byes are never disturbed.
+     */
+    private function isDifferentPersonFrom(Player $dbPlayer, ?string $btName): bool
+    {
+        if (!$btName || strcasecmp($btName, 'Bye') === 0) return false;
+        $dbSurname = BracketTennisScraper::surnameKey($dbPlayer->name ?? '');
+        $btSurname = BracketTennisScraper::surnameKey($btName);
+        if ($dbSurname === '' || $btSurname === '') return false;
+        return $dbSurname !== $btSurname;
     }
 
     /**
