@@ -1676,18 +1676,49 @@ function bracketApp() {
             this.saving = true;
             this.saveMsg = '';
             this.finalScore = this.serializeFinalScore();
+
+            const url = '{{ route("bracket-predictions.store", $tournament) }}';
+            const body = JSON.stringify({ picks: this.picks, final_score: this.finalScore });
+            // Read the token from the <meta> tag rather than baking it into JS,
+            // so a retry can swap in a freshly-fetched one.
+            const tokenMeta = document.querySelector('meta[name="csrf-token"]');
+            const postWith = (token) => fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+                body,
+            });
+
             try {
-                const res = await fetch('{{ route("bracket-predictions.store", $tournament) }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
-                    body: JSON.stringify({ picks: this.picks, final_score: this.finalScore })
-                });
-                const data = await res.json();
-                if (data.success) { this.saveOk = true; this.saveMsg = 'Bracket guardado exitosamente'; setTimeout(() => window.location.reload(), 800); }
-                else { this.saveOk = false; this.saveMsg = data.message || 'Error al guardar'; }
+                let token = tokenMeta ? tokenMeta.getAttribute('content') : '{{ csrf_token() }}';
+                let res = await postWith(token);
+
+                // 419 = expired/mismatched CSRF token (page open too long). Grab a
+                // fresh token and retry once before giving up — this is the case
+                // the client reported as "CSRF token mismatch" on a long session.
+                if (res.status === 419) {
+                    try {
+                        const fresh = await fetch('{{ route("csrf.token") }}', { headers: { 'Accept': 'application/json' } });
+                        const freshData = await fresh.json();
+                        if (freshData.token) {
+                            if (tokenMeta) tokenMeta.setAttribute('content', freshData.token);
+                            res = await postWith(freshData.token);
+                        }
+                    } catch (_) { /* fall through to the error handling below */ }
+                }
+
+                if (res.status === 419) {
+                    // Still failing — session is truly gone (logged out). Tell the
+                    // user plainly instead of a confusing "connection error".
+                    this.saveOk = false;
+                    this.saveMsg = 'Tu sesión expiró. Recarga la página e inténtalo de nuevo.';
+                } else {
+                    const data = await res.json();
+                    if (data.success) { this.saveOk = true; this.saveMsg = 'Bracket guardado exitosamente'; setTimeout(() => window.location.reload(), 800); }
+                    else { this.saveOk = false; this.saveMsg = data.message || 'Error al guardar'; }
+                }
             } catch (e) { this.saveOk = false; this.saveMsg = 'Error de conexión'; }
             this.saving = false;
-            setTimeout(() => this.saveMsg = '', 3000);
+            setTimeout(() => this.saveMsg = '', 4000);
         }
     };
 }

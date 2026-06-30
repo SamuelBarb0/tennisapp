@@ -22,6 +22,12 @@ use App\Http\Controllers\Admin\SettingController as AdminSettingController;
 use App\Http\Controllers\Admin\SimulationController;
 use Illuminate\Support\Facades\Route;
 
+// Lightweight CSRF token refresh. The bracket page can stay open for a long
+// time while a user fills 127 picks; by submit time the baked-in token may have
+// expired (419 "CSRF token mismatch"). The save handler calls this to fetch a
+// fresh token and retry once, so a long-open page never loses the user's work.
+Route::get('/csrf-token', fn() => response()->json(['token' => csrf_token()]))->name('csrf.token');
+
 // Public routes
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/tournaments', [TournamentController::class, 'index'])->name('tournaments.index');

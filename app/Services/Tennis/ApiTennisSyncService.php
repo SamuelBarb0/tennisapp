@@ -309,6 +309,42 @@ class ApiTennisSyncService
         // updates seeds, but never overwrites a real player or a result.
         $bootstrapped = $this->bootstrapFromBracketTennis($tournament);
 
+        // ── PRE-START FREEZE ────────────────────────────────────────────────
+        // Before a tournament's MAIN DRAW begins, api-tennis is publishing
+        // QUALIFYING fixtures (qualy runs the week before a Grand Slam). Those
+        // qualy players share surnames with main-draw players and trip the
+        // fuzzy matchers (name-pass, structural-pass, dedupe), which then plant
+        // the wrong player — or the same player in several slots — all over the
+        // main draw. We saw this scramble Wimbledon repeatedly: Arthur Gea in 3
+        // slots, Shevchenko/De Minaur duplicated, Pegula replaced by Bouzas,
+        // etc., and TBDs left behind that made the bracket read "no disponible".
+        //
+        // The draw of an upcoming tournament should come ONLY from the
+        // bracket.tennis bootstrap above. api-tennis has nothing useful to add
+        // until play actually starts (no real results yet), so we stop here.
+        // Once start_date has passed we resume the full enrich/score flow.
+        $mainDrawStarted = $tournament->start_date
+            && $tournament->start_date->isPast();
+        if (!$mainDrawStarted) {
+            // Still apply manual badge overrides + keep predictions aligned so
+            // the bootstrap's draw renders correctly for users to predict on.
+            $this->applySeedOverrides($tournament);
+            app(PredictionRealigner::class)->realign($tournament);
+            $placeholders = $this->ensureBracketPlaceholders($tournament);
+            $tournament->update(['last_synced_at' => now()]);
+
+            return [
+                'fixtures'     => count($allFixtures),
+                'main_draw'    => 0,
+                'qualy'        => count($allFixtures),
+                'finished'     => 0,
+                'scored'       => 0,
+                'placeholders' => $placeholders,
+                'bootstrapped' => $bootstrapped,
+                'frozen'       => 'pre-start (main draw not begun)',
+            ];
+        }
+
         // Detect whether api-tennis has published main-draw fixtures yet.
         // Grand Slams publish qualifying days before the main draw, so we
         // explicitly filter qualy out — an empty()-only guard kept us stuck on
