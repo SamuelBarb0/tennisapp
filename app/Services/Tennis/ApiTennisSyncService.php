@@ -309,42 +309,6 @@ class ApiTennisSyncService
         // updates seeds, but never overwrites a real player or a result.
         $bootstrapped = $this->bootstrapFromBracketTennis($tournament);
 
-        // ── PRE-START FREEZE ────────────────────────────────────────────────
-        // Before a tournament's MAIN DRAW begins, api-tennis is publishing
-        // QUALIFYING fixtures (qualy runs the week before a Grand Slam). Those
-        // qualy players share surnames with main-draw players and trip the
-        // fuzzy matchers (name-pass, structural-pass, dedupe), which then plant
-        // the wrong player — or the same player in several slots — all over the
-        // main draw. We saw this scramble Wimbledon repeatedly: Arthur Gea in 3
-        // slots, Shevchenko/De Minaur duplicated, Pegula replaced by Bouzas,
-        // etc., and TBDs left behind that made the bracket read "no disponible".
-        //
-        // The draw of an upcoming tournament should come ONLY from the
-        // bracket.tennis bootstrap above. api-tennis has nothing useful to add
-        // until play actually starts (no real results yet), so we stop here.
-        // Once start_date has passed we resume the full enrich/score flow.
-        $mainDrawStarted = $tournament->start_date
-            && $tournament->start_date->isPast();
-        if (!$mainDrawStarted) {
-            // Still apply manual badge overrides + keep predictions aligned so
-            // the bootstrap's draw renders correctly for users to predict on.
-            $this->applySeedOverrides($tournament);
-            app(PredictionRealigner::class)->realign($tournament);
-            $placeholders = $this->ensureBracketPlaceholders($tournament);
-            $tournament->update(['last_synced_at' => now()]);
-
-            return [
-                'fixtures'     => count($allFixtures),
-                'main_draw'    => 0,
-                'qualy'        => count($allFixtures),
-                'finished'     => 0,
-                'scored'       => 0,
-                'placeholders' => $placeholders,
-                'bootstrapped' => $bootstrapped,
-                'frozen'       => 'pre-start (main draw not begun)',
-            ];
-        }
-
         // Detect whether api-tennis has published main-draw fixtures yet.
         // Grand Slams publish qualifying days before the main draw, so we
         // explicitly filter qualy out — an empty()-only guard kept us stuck on
@@ -382,16 +346,26 @@ class ApiTennisSyncService
         // Wrap into the shape the rest of the loop expects.
         $resp = ['result' => array_values($allFixtures)];
 
-        // PRE-DEDUPE: for every player coming in from api-tennis fixtures,
-        // check if there's a same-tour duplicate Player row in BD that
-        // shares the surname and is name-compatible (Felix Auger Aliassime
-        // vs F. Auger-Aliassime). Merge them BEFORE the matching loop so
-        // every slot that refers to the duplicate gets re-pointed to the
-        // canonical (api-tennis) Player id. Without this, the structural
-        // Pass 2 fails: it searches the previous round for the canonical
-        // player_id and misses slots that still hold the duplicate.
-        $this->dedupePlayersForFixtures($resp['result'], $tournament);
-
+        // ════════════════════════════════════════════════════════════════════
+        //  RESULTS-ONLY SYNC — api-tennis is NOT allowed to touch structure.
+        // ════════════════════════════════════════════════════════════════════
+        // bracket.tennis owns WHO is in every slot (players, seeds, positions,
+        // byes). api-tennis is restricted to the RESULT of a match between the
+        // two players bracket.tennis already placed: the score, the winner
+        // (which must be one of those two players), retirement/walkover notes,
+        // and the scheduled time. It may NEVER:
+        //   - create a match / slot,
+        //   - fill, move, swap, or dedupe a player,
+        //   - pick a winner who isn't already one of the slot's two players,
+        //   - change round or bracket_position.
+        //
+        // This is the fix for the repeated Wimbledon corruption: the old
+        // matching passes (player-name fuzzy match, structural placement,
+        // pre-dedupe, Lucky-Loser swaps, TBD fills) pulled qualifying-draw
+        // players into the main draw and duplicated players across slots. All
+        // of that is gone. A fixture only lands on a slot when we can identify
+        // that slot UNAMBIGUOUSLY — by api_event_key, or because BOTH of the
+        // fixture's players already sit in that exact slot.
         $newlyFinished = [];
         $updated = 0;
         $skippedQualy = 0;
@@ -434,6 +408,12 @@ class ApiTennisSyncService
                 continue;
             }
 
+            // Resolve the two players the fixture refers to. We do NOT create
+            // new Player rows here for unknown players — if api-tennis names
+            // someone bracket.tennis never placed, that fixture simply won't
+            // match any slot and is skipped. (upsertPlayerFromFixture is still
+            // used because it resolves an EXISTING player by api_player_key,
+            // which is how we compare against the slot's current occupants.)
             $player1 = $this->upsertPlayerFromFixture(
                 $f['first_player_key'] ?? null,
                 $f['event_first_player'] ?? null,
@@ -449,24 +429,69 @@ class ApiTennisSyncService
 
             $status = $this->mapStatus($f['event_status'] ?? null);
             $winnerSide = $f['event_winner'] ?? null;
-            $winnerId = null;
-            if ($status === 'finished') {
-                if ($winnerSide === 'First Player')  $winnerId = $player1?->id;
-                if ($winnerSide === 'Second Player') $winnerId = $player2?->id;
-            }
-
             $round = $this->mapRound($f['tournament_round'] ?? '');
 
             // Compute status note for retirements / walkovers / suspensions.
             // The LOSING player gets the tag (ret./wo/etc.) next to their name.
             $statusNote = $this->computeStatusNote($f, $winnerSide);
 
-            // Results-only payload. api-tennis ONLY contributes scores, winners,
-            // status and scheduling — never the player_id, seed, round, or
-            // bracket_position. Those belong to bracket.tennis (the structural
-            // authority) and changing them here is what historically scrambled
-            // the bracket (sibling player confusion, ghost matches, etc.).
-            $resultAttrs = [
+            // ── SLOT LOOKUP — strict, no fuzzy matching, no creation ─────────
+            // 1) Exact match by api_event_key (a fixture we've already synced).
+            // 2) Otherwise, the UNIQUE bracket.tennis slot in this round whose
+            //    TWO players are exactly this fixture's two players (in either
+            //    order). Both must match — that's what makes it unambiguous and
+            //    impossible to drop a qualy player into the wrong slot.
+            // If neither identifies a slot, we SKIP. api-tennis never creates a
+            // slot or plants a player.
+            $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first();
+
+            if (!$existing && $player1 && $player2) {
+                $existing = TennisMatch::where('tournament_id', $tournament->id)
+                    ->where('round', $round)
+                    ->where(function ($q) use ($player1, $player2) {
+                        $q->where(function ($a) use ($player1, $player2) {
+                            $a->where('player1_id', $player1->id)
+                              ->where('player2_id', $player2->id);
+                        })->orWhere(function ($b) use ($player1, $player2) {
+                            $b->where('player1_id', $player2->id)
+                              ->where('player2_id', $player1->id);
+                        });
+                    })
+                    ->first();
+            }
+
+            if (!$existing) {
+                // No unambiguous slot — do not invent one.
+                $skippedQualy++; // reuse counter to avoid adding a return key
+                continue;
+            }
+
+            // ── WINNER — must be one of the two players ALREADY in the slot ──
+            // We pick the winner by the side api-tennis reports, but map it to
+            // the slot's own player_id (never the fixture's), so even if
+            // api-tennis hands back a slightly different Player row for the
+            // same person, the winner stored is always a player physically in
+            // this slot. If the reported winner isn't one of the slot's two
+            // players, we leave winner_id untouched.
+            $winnerId = $existing->winner_id;
+            if ($status === 'finished') {
+                if ($winnerSide === 'First Player' && $player1
+                    && in_array($player1->id, [$existing->player1_id, $existing->player2_id], true)) {
+                    $winnerId = $player1->id;
+                } elseif ($winnerSide === 'Second Player' && $player2
+                    && in_array($player2->id, [$existing->player1_id, $existing->player2_id], true)) {
+                    $winnerId = $player2->id;
+                }
+            }
+
+            // ── RESULTS-ONLY UPDATE ─────────────────────────────────────────
+            // Score, note, schedule, status, winner. NEVER players, seeds,
+            // round, or bracket_position.
+            $wasFinished = $existing->status === 'finished';
+            $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
+                || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
+
+            $updateAttrs = [
                 'status'       => $status,
                 'status_note'  => $statusNote,
                 'winner_id'    => $winnerId,
@@ -474,298 +499,11 @@ class ApiTennisSyncService
                 'scheduled_at' => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null, $tournament->timezone ?: 'America/Bogota'),
             ];
 
-            // For "qualifier upgrade" cases — when bracket.tennis had this slot
-            // as "real seed vs Qualifier/LL" and api-tennis now confirms a
-            // specific qualifier — we DO allow filling in the missing player.
-            // Only fills NULLs / TBD; never overwrites a real player.
-            $tbdId = Player::where('name', 'TBD')->value('id');
-            $playerFillAttrs = [
-                'player1_id'   => $player1?->id,
-                'player2_id'   => $player2?->id,
-                'round'        => $round,
-                'tournament_id'=> $tournament->id,
-            ];
-
-            // ─── bracket.tennis is the source of truth for bracket structure ───
-            // api-tennis only ENRICHES existing matches (scores, winners, status).
-            // We never let it create new slots or move bracket_position, because:
-            //   - api-tennis sometimes returns extra fixtures (exhibition matches,
-            //     mixed doubles bleeding into the singles feed, etc.) which would
-            //     create ghost slots that desorganize the visual bracket.
-            //   - surname-based matching is fragile across name spellings, so a
-            //     misspelled player would land in the wrong slot.
-            //
-            // Match lookup order:
-            //   1. Exact match by api_event_key (already-synced fixture).
-            //   2. A bracket.tennis bootstrap slot or placeholder where at least
-            //      one player matches → upgrade that slot.
-            //   3. If neither matches, SKIP this fixture entirely — we don't
-            //      create a new slot.
-            $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first();
-
-            if (!$existing) {
-                // Candidates for player-based matching: placeholder rows,
-                // bootstrap rows, AND existing match rows that are still
-                // unresolved (pending or cancelled). The last group covers
-                // the Lucky Loser case: api-tennis cancels the original
-                // "X vs Withdrew" fixture and emits a new "X vs LL" one
-                // with a different event_key. We need to land that new
-                // fixture on the existing slot, not skip it.
-                $candidates = TennisMatch::where('tournament_id', $tournament->id)
-                    ->where('round', $round)
-                    ->where(function ($q) {
-                        $q->where('api_event_key', 'LIKE', 'placeholder-%')
-                          ->orWhere('api_event_key', 'LIKE', 'bt-bootstrap-%')
-                          ->orWhereIn('status', ['pending', 'cancelled']);
-                    })
-                    ->orderBy('bracket_position')
-                    ->get();
-
-                // Pass 1: candidate where at least one player matches. Handles
-                // the qualifier case (real seed vs TBD on bracket.tennis, then
-                // api-tennis fills in the qualifier later), the case where a
-                // winner from a previous round already populated one side, AND
-                // the Lucky Loser case where the slot's old opponent withdrew
-                // and a new fixture brings the replacement.
-                foreach ($candidates as $c) {
-                    $matchesP1 = $player1 && ($c->player1_id === $player1->id || $c->player2_id === $player1->id);
-                    $matchesP2 = $player2 && ($c->player1_id === $player2->id || $c->player2_id === $player2->id);
-                    if ($matchesP1 || $matchesP2) {
-                        $existing = $c;
-                        break;
-                    }
-                }
-
-                // Pass 1.5: NAME-BASED MATCHING for cross-naming duplicates.
-                // When BD has "Pablo Carreno Busta" (id=1513, no api_key) and
-                // api-tennis emits "P. Carreno-Busta" (id=104), Pass 1 fails
-                // because the IDs differ. We catch that here by comparing
-                // names via shared-token heuristics. When we find the slot
-                // AND BD's stored player isn't the same id as ours, we
-                // auto-merge: re-point the slot to the api-tennis canonical
-                // player (the one with api_key) so future syncs match by id.
-                if (!$existing) {
-                    // Helper: true if BD's stored name and api-tennis's name
-                    // describe the same person. Two heuristics combined:
-                    //   1) compactTokens drops single-letter initials and
-                    //      splits hyphenated names. The two token lists
-                    //      MUST share at least one token of >= 3 chars
-                    //      that ISN'T a known first-name (the surname-ish
-                    //      tokens are what identifies the same person).
-                    //   2) If both names still have a first-name token,
-                    //      it must be prefix-compatible (Felix ⊃ F).
-                    //      If one name's first-name was an initial that
-                    //      compactTokens dropped, we skip this check —
-                    //      the surname-match is enough.
-                    $sameNamePerson = function ($a, $b): bool {
-                        $aTokens = $this->compactTokens($a);
-                        $bTokens = $this->compactTokens($b);
-                        if (empty($aTokens) || empty($bTokens)) return false;
-
-                        $shared = array_intersect($aTokens, $bTokens);
-                        if (empty($shared)) return false;
-
-                        // Try to identify the first-name token in each list.
-                        // If we can extract it from both (i.e. both names have
-                        // at least one token NOT in the shared surname set),
-                        // they must be prefix-compatible.
-                        $aFirst = $this->firstNamePrefix($a);
-                        $bFirst = $this->firstNamePrefix($b);
-                        if ($aFirst !== '' && $bFirst !== ''
-                            && !str_starts_with($aFirst, $bFirst)
-                            && !str_starts_with($bFirst, $aFirst)) {
-                            return false;
-                        }
-                        return true;
-                    };
-
-                    foreach ($candidates as $c) {
-                        $matchedByName = false;
-                        $sidesToReassign = []; // [side => $playerToUse]
-
-                        foreach ([['player1', $player1], ['player2', $player2]] as [$ourSide, $ourPlayer]) {
-                            if (!$ourPlayer) continue;
-                            foreach (['player1', 'player2'] as $candSide) {
-                                $candPlayer = $c->{$candSide};
-                                if (!$candPlayer) continue;
-                                if ($candPlayer->id === $ourPlayer->id) continue; // already same
-                                if ($sameNamePerson($candPlayer->name ?? '', $ourPlayer->name ?? '')) {
-                                    $matchedByName = true;
-                                    $sidesToReassign[$candSide . '_id'] = $ourPlayer->id;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if ($matchedByName) {
-                            // Re-point the slot to the canonical (api-tennis)
-                            // player id so future syncs match by id directly.
-                            if (!empty($sidesToReassign)) {
-                                $c->update($sidesToReassign);
-                                $c->refresh();
-                            }
-                            $existing = $c;
-                            break;
-                        }
-                    }
-                }
-
-                // Pass 2: STRUCTURAL placement for R64+ fixtures whose target
-                // slot is still TBD-vs-TBD. We compute where the fixture
-                // belongs by finding the two players in the previous round
-                // and using bracket math: the next-round slot is
-                // ceil(prev_pos / 2). This is SAFE because we anchor to a
-                // previous-round slot that already has both players (not
-                // an arbitrary first-empty slot).
-                //
-                // The old "first TBD-vs-TBD slot in order" approach caused
-                // the Khachanov-vs-Trungelliti-in-R64-pos=1 bug at Roland
-                // Garros. The fix is structural anchoring.
-                if (!$existing && $round !== 'R128') {
-                    $rounds = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
-                    $i = array_search($round, $rounds, true);
-                    $prevRound = $i > 0 ? $rounds[$i - 1] : null;
-                    if ($prevRound) {
-                        $prevP1 = $player1 ? TennisMatch::where('tournament_id', $tournament->id)
-                            ->where('round', $prevRound)
-                            ->where(function ($q) use ($player1) {
-                                $q->where('player1_id', $player1->id)
-                                  ->orWhere('player2_id', $player1->id);
-                            })
-                            ->orderByDesc('id') // prefer the most recent match for this player in prev round
-                            ->first() : null;
-                        $prevP2 = $player2 ? TennisMatch::where('tournament_id', $tournament->id)
-                            ->where('round', $prevRound)
-                            ->where(function ($q) use ($player2) {
-                                $q->where('player1_id', $player2->id)
-                                  ->orWhere('player2_id', $player2->id);
-                            })
-                            ->orderByDesc('id')
-                            ->first() : null;
-
-                        if ($prevP1 && $prevP2) {
-                            $targetSlot = (int) ceil(min($prevP1->bracket_position, $prevP2->bracket_position) / 2);
-                            // Also check both feed into the same target.
-                            $altSlot   = (int) ceil(max($prevP1->bracket_position, $prevP2->bracket_position) / 2);
-                            if ($targetSlot === $altSlot) {
-                                $candidate = TennisMatch::where('tournament_id', $tournament->id)
-                                    ->where('round', $round)
-                                    ->where('bracket_position', $targetSlot)
-                                    ->first();
-                                if ($candidate) {
-                                    $isPlaceholder = str_starts_with($candidate->api_event_key ?? '', 'placeholder-');
-                                    $tbdId = Player::where('name', 'TBD')->value('id');
-                                    $bothTbd = $tbdId && $candidate->player1_id === $tbdId && $candidate->player2_id === $tbdId;
-                                    if ($isPlaceholder && $bothTbd) {
-                                        // Safe to assign: structural slot
-                                        // and currently empty.
-                                        $candidate->update([
-                                            'player1_id' => $player1->id,
-                                            'player2_id' => $player2->id,
-                                        ]);
-                                        $existing = $candidate;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!$existing) {
-                // Skip orphan fixtures rather than inventing slots. The user-visible
-                // bracket structure stays anchored to bracket.tennis.
-                $skippedQualy++; // reuse counter to avoid adding a new return key
-                continue;
-            }
-
-            $wasFinished = $existing->status === 'finished';
-            $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
-                || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
-
-            // Build the actual update payload. Start with results-only fields.
-            $updateAttrs = $resultAttrs;
-
-            // Re-anchor winner_id to a player_id that ACTUALLY lives in this
-            // slot's player1/player2. api-tennis sometimes returns a slightly
-            // different Player (sibling-confusion artifact in their data) for
-            // the same physical match — if we used that Player as winner_id,
-            // the propagation downstream would carry the wrong ID into R64+.
-            // Since bracket.tennis owns the slot's identity, we keep it.
-            $apiWinnerId = $updateAttrs['winner_id'] ?? null;
-            if ($apiWinnerId && $existing->player1_id && $existing->player2_id) {
-                if ($winnerSide === 'First Player') {
-                    $updateAttrs['winner_id'] = $existing->player1_id;
-                } elseif ($winnerSide === 'Second Player') {
-                    $updateAttrs['winner_id'] = $existing->player2_id;
-                }
-            }
-
-            // Adopt the real api_event_key when upgrading a placeholder slot,
-            // so future syncs match by event_key instead of falling back to
-            // player matching.
+            // Adopt the real api_event_key when this is the first time a fixture
+            // lands on a bootstrap/placeholder slot, so future syncs match by
+            // event_key directly. This changes only the key, not the structure.
             if ($isPlaceholder) {
                 $updateAttrs['api_event_key'] = (string) $eventKey;
-            }
-
-            // PLAYER FILL — api-tennis NEVER changes players. The only
-            // exception is filling a TBD placeholder in R128 (or whatever
-            // the starting round is): those are slots bracket.tennis
-            // published as "Qualifier/LL/TBD" because they weren't
-            // confirmed yet at scrape time. Once the slot has a real
-            // player from BT, it stays untouched here.
-            //
-            // For R64 and beyond: TBD slots are NEVER filled from
-            // api-tennis fixtures, because we can't trust the position
-            // mapping. api-tennis sometimes publishes a future-round
-            // fixture (e.g. Khachanov vs Trungelliti for R64) and the
-            // fallback "first TBD-vs-TBD slot" matcher would drop those
-            // players in the WRONG bracket_position (pos=1 instead of
-            // pos=29). Players for R64+ slots come ONLY from the
-            // structural winner propagation that runs after a R128 match
-            // is marked finished — see inferUnreportedWalkovers and the
-            // score-driven advancement code.
-            //
-            // All other player changes (Lucky Loser substitutions, late
-            // withdrawals, name corrections) come from bracket.tennis via
-            // bootstrapFromBracketTennis(). Single source of truth = no
-            // possibility of api-tennis and BT showing different players
-            // in the same slot.
-            // Only fill TBDs in rows created by the bootstrap (starting
-            // round = R128 for full draws, R64 for 56-draws, etc.). Rows
-            // created by ensureBracketPlaceholders for later rounds keep
-            // their TBDs until the winner propagation fills them.
-            $cameFromBootstrap = str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
-            if ($cameFromBootstrap) {
-                if ($tbdId && $existing->player1_id === $tbdId && $player1) {
-                    $updateAttrs['player1_id'] = $player1->id;
-                }
-                if ($tbdId && $existing->player2_id === $tbdId && $player2) {
-                    $updateAttrs['player2_id'] = $player2->id;
-                }
-            }
-
-            // Lucky Loser case: the slot was previously cancelled (its
-            // original opponent withdrew). api-tennis has now emitted a NEW
-            // fixture for the same slot with a different opponent. We
-            // adopt the new event_key and update the side whose player
-            // changed. The seeded/canonical side from BT stays put — we
-            // only swap the side that doesn't match either current player.
-            if ($existing->status === 'cancelled' && $player1 && $player2) {
-                $p1Matches = $existing->player1_id === $player1->id || $existing->player2_id === $player1->id;
-                $p2Matches = $existing->player1_id === $player2->id || $existing->player2_id === $player2->id;
-                if ($p1Matches !== $p2Matches) {
-                    // Exactly one of the fixture's players matches a side
-                    // of the existing slot — the OTHER side is the LL.
-                    $matchedPlayer = $p1Matches ? $player1 : $player2;
-                    $newPlayer     = $p1Matches ? $player2 : $player1;
-                    if ($existing->player1_id === $matchedPlayer->id) {
-                        $updateAttrs['player2_id'] = $newPlayer->id;
-                    } else {
-                        $updateAttrs['player1_id'] = $newPlayer->id;
-                    }
-                    $updateAttrs['api_event_key'] = (string) $eventKey;
-                }
             }
 
             $existing->update($updateAttrs);
