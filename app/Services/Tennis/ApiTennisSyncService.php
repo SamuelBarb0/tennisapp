@@ -346,6 +346,22 @@ class ApiTennisSyncService
         // Wrap into the shape the rest of the loop expects.
         $resp = ['result' => array_values($allFixtures)];
 
+        // PLAYER DEDUPE (identity merge only — NOT placement). bracket.tennis
+        // bootstraps players WITHOUT an api_player_key ("Pablo Carreno Busta"),
+        // while api-tennis fixtures carry the keyed row ("P. Carreno-Busta",
+        // key=434). When a slot holds the key-less copy, the keyed fixture
+        // resolves to a DIFFERENT Player id and the result never lands (the
+        // match shows pending / no score even though it was played — the bug
+        // the client reported for retirements like Carreno-Busta & Merida).
+        //
+        // This merges the two rows for the SAME person: re-points every match
+        // FK from the key-less duplicate to the canonical keyed row, then
+        // deletes the orphan. It is purely an identity cleanup — it never moves
+        // a player to a different slot or changes who is in the bracket, so it
+        // does NOT reintroduce the structural corruption we removed. After it
+        // runs, the slot and the fixture share one player_id and results land.
+        $this->dedupePlayersForFixtures($resp['result'], $tournament);
+
         // ════════════════════════════════════════════════════════════════════
         //  RESULTS-ONLY SYNC — api-tennis is NOT allowed to touch structure.
         // ════════════════════════════════════════════════════════════════════
@@ -355,17 +371,17 @@ class ApiTennisSyncService
         // (which must be one of those two players), retirement/walkover notes,
         // and the scheduled time. It may NEVER:
         //   - create a match / slot,
-        //   - fill, move, swap, or dedupe a player,
+        //   - fill, move, or swap a player into a slot,
         //   - pick a winner who isn't already one of the slot's two players,
         //   - change round or bracket_position.
         //
         // This is the fix for the repeated Wimbledon corruption: the old
         // matching passes (player-name fuzzy match, structural placement,
-        // pre-dedupe, Lucky-Loser swaps, TBD fills) pulled qualifying-draw
-        // players into the main draw and duplicated players across slots. All
-        // of that is gone. A fixture only lands on a slot when we can identify
-        // that slot UNAMBIGUOUSLY — by api_event_key, or because BOTH of the
-        // fixture's players already sit in that exact slot.
+        // Lucky-Loser swaps, TBD fills) pulled qualifying-draw players into the
+        // main draw and duplicated players across slots. All of that is gone. A
+        // fixture only lands on a slot when we can identify that slot
+        // UNAMBIGUOUSLY — by api_event_key, or because BOTH of the fixture's
+        // players already sit in that exact slot.
         $newlyFinished = [];
         $updated = 0;
         $skippedQualy = 0;
@@ -516,11 +532,15 @@ class ApiTennisSyncService
             $scored = BracketPredictionController::scoreTournament($tournament);
         }
 
-        // Detect walkovers the API didn't report cleanly. If a match is still
-        // pending with score="0-0" or null while the next-round match it feeds
-        // into already has a real winner, the winner of the pending match must
-        // be whoever shows up in the next round.
-        $this->inferUnreportedWalkovers($tournament);
+        // NOTE: we no longer INFER walkovers from the bracket shape. A match's
+        // result (real score, walkover, or retirement) comes ONLY from what
+        // api-tennis actually reports — never guessed from whether a player
+        // already appears in the next round. The old inferUnreportedWalkovers()
+        // stamped genuinely-played matches as "walkover, no score" whenever
+        // bracket.tennis had already advanced a player downstream, which is the
+        // bug the client reported (matches shown as walkovers though they were
+        // played). If api-tennis hasn't sent a score yet, the match simply
+        // stays pending until it does.
 
         // Bracket structure is owned by the bootstrap (bracket.tennis) and
         // the one-shot `tennis:repair-bracket-positions` admin command. The
