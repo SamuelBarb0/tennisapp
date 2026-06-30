@@ -1758,13 +1758,47 @@ class ApiTennisSyncService
                     $shared = array_intersect($tokens, $dupTokens);
                     if (empty($shared)) continue;
 
-                    // Require first-name compatibility (Felix ⊃ F).
+                    // Require given-name compatibility, tolerant of the source
+                    // abbreviating a NON-first given name. api-tennis sends
+                    // "D. Vallejo" for "Adolfo Daniel Vallejo" — it initialled
+                    // the SECOND given name, so comparing only the first token
+                    // ("d" vs "adolfo") wrongly rejected the merge.
+                    //
+                    // Rule: take each side's given-name tokens (everything that
+                    // isn't the shared surname). The two are compatible if the
+                    // first-name initial/prefix of EITHER side is a prefix of
+                    // SOME given-name token on the other side. This still keeps
+                    // siblings apart — "F." vs {juan, manuel} matches no token,
+                    // and "Francisco" vs {juan, manuel} matches none either.
+                    // Build each side's GIVEN-name tokens = its full token list
+                    // minus the shared surname. compactTokens drops bare
+                    // initials, so for "D. Vallejo" we fall back to the first
+                    // name prefix ("d") to still have something to compare.
+                    $canGiven = array_values(array_diff($tokens, $shared));
+                    $dupGiven = array_values(array_diff($dupTokens, $shared));
                     $canFirst = $this->firstNamePrefix($canonical->name ?? '');
                     $dupFirst = $this->firstNamePrefix($dup->name ?? '');
-                    if ($canFirst !== '' && $dupFirst !== ''
-                        && !str_starts_with($canFirst, $dupFirst)
-                        && !str_starts_with($dupFirst, $canFirst)) {
-                        continue;
+                    if (empty($canGiven) && $canFirst !== '') $canGiven = [$canFirst];
+                    if (empty($dupGiven) && $dupFirst !== '') $dupGiven = [$dupFirst];
+
+                    // Compatible if EITHER side's first prefix is a prefix of
+                    // SOME given token on the other side. Tolerates an
+                    // abbreviated non-first given name ("D." ⊂ "daniel") while
+                    // still separating siblings ("f" matches neither "juan" nor
+                    // "manuel").
+                    $prefixMatchesAny = function (string $prefix, array $given): bool {
+                        if ($prefix === '') return false;
+                        foreach ($given as $tok) {
+                            if ($tok !== '' && (str_starts_with($tok, $prefix) || str_starts_with($prefix, $tok))) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    };
+                    if (!empty($canGiven) && !empty($dupGiven)) {
+                        $ok = $prefixMatchesAny($canFirst, $dupGiven)
+                            || $prefixMatchesAny($dupFirst, $canGiven);
+                        if (!$ok) continue;
                     }
 
                     // Found a duplicate. Re-point every FK to the canonical
