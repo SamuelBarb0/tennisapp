@@ -72,6 +72,17 @@ class TennisResetAndSync extends Command
             return self::FAILURE;
         }
 
+        // Back up every pick of the tournaments about to be wiped, so they can
+        // be restored later with `tennis:restore-bracket-predictions`.
+        $backedUp = 0;
+        foreach ($realTournaments as $rt) {
+            [, $n] = \App\Models\BracketPredictionBackup::snapshotTournament($rt->id, 'reset');
+            $backedUp += $n;
+        }
+        if ($backedUp > 0) {
+            $this->line("  · Backed up <fg=green>{$backedUp}</> bracket predictions before wipe.");
+        }
+
         DB::transaction(function () use ($testTournaments) {
             $this->line('🗑  Wiping legacy data...');
 

@@ -527,8 +527,14 @@ class ApiTennisSyncService
             $updated++;
         }
 
+        // Heal lucky-loser / late-replacement slots that bracket.tennis hasn't
+        // caught up on. Detected purely from api-tennis (a Cancelled fixture for
+        // the slot + a Finished fixture that shares exactly one of the slot's
+        // players). See method docblock for the safety conditions.
+        $healed = $this->healCancelledReplacements($tournament, $resp['result']);
+
         $scored = 0;
-        if (!empty($newlyFinished)) {
+        if (!empty($newlyFinished) || $healed > 0) {
             $scored = BracketPredictionController::scoreTournament($tournament);
         }
 
@@ -572,7 +578,11 @@ class ApiTennisSyncService
         //     scraper reorders the bracket (Roland Garros 2026 incident:
         //     ~half of one user's R128 picks moved one slot when the
         //     scraped order replaced the bootstrap order).
-        app(PredictionRealigner::class)->realign($tournament);
+        // Reconciler first re-links any pick whose player row was deleted (using
+        // the stable snapshot), THEN realigns positions / promotes placeholders /
+        // transfers to lucky-loser replacements. This keeps a user's selection
+        // alive across player churn instead of losing it.
+        app(PredictionReconciler::class)->reconcile($tournament);
 
         // Fill in placeholder matches for later rounds so the bracket renders
         // complete (Quarter-finals / Semis / Final) even before the API
@@ -691,6 +701,131 @@ class ApiTennisSyncService
      * blindly trust them" approach, which produced the
      * Khachanov-vs-Trungelliti-in-R64-pos=1 bug (real match, wrong slot).
      */
+    /**
+     * Heal a slot when a player withdrew and a lucky loser took their place,
+     * but bracket.tennis (our structure source) hasn't reflected it yet.
+     *
+     * The signal comes entirely from api-tennis and is intentionally strict so
+     * it can never misfire the way the old fuzzy matcher did:
+     *
+     *   1. api-tennis has a CANCELLED fixture whose two players are exactly the
+     *      two players currently sitting in one of our (still pending) slots.
+     *      → that slot's original match was called off.
+     *   2. api-tennis also has a FINISHED fixture in the SAME round that shares
+     *      EXACTLY ONE of those two players (the "survivor") and whose other
+     *      player is a different, real person (the lucky loser / replacement).
+     *
+     * When both hold, we: put the replacement into the withdrawn player's side
+     * (badge "LL"), land the finished result (score + winner mapped to a player
+     * physically in the slot), and mark it finished. propagateWinners then
+     * advances the winner and the reconciler transfers any pick that was on the
+     * withdrawn player to the replacement.
+     *
+     * Returns the number of slots healed.
+     */
+    private function healCancelledReplacements(Tournament $tournament, array $fixtures): int
+    {
+        $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
+        $tbd  = Player::where('name', 'TBD')->first();
+        if (!$tbd) return 0;
+
+        $placeholderIds = Player::where(function ($q) {
+            $q->where('name', 'TBD')
+              ->orWhere('name', 'like', '%Qualifier%')
+              ->orWhere('name', 'like', '%Lucky Loser%')
+              ->orWhere('name', 'like', '%Por definir%')
+              ->orWhereRaw('LOWER(name) = ?', ['ll']);
+        })->pluck('id')->all();
+
+        // Group non-qualy fixtures by our internal round label.
+        $byRound = [];
+        foreach ($fixtures as $f) {
+            $isQualy = ($f['event_qualification'] ?? null) === 'True' || ($f['event_qualification'] ?? null) === true;
+            if ($isQualy) continue;
+            $round = $this->mapRound($f['tournament_round'] ?? '');
+            if (!$round) continue;
+            $byRound[$round][] = $f;
+        }
+
+        $healed = 0;
+        foreach ($byRound as $round => $list) {
+            $cancelled = array_filter($list, fn ($f) => str_contains(mb_strtolower((string) ($f['event_status'] ?? '')), 'cancelled'));
+            if (!$cancelled) continue;
+            $finished = array_filter($list, fn ($f) => $this->mapStatus($f['event_status'] ?? null) === 'finished' && !empty($f['event_winner']));
+            if (!$finished) continue;
+
+            foreach ($cancelled as $cf) {
+                $cp1 = $this->resolveBootstrapPlayer($cf['event_first_player'] ?? null, $cf['event_first_player_country'] ?? null, $tbd, $tour);
+                $cp2 = $this->resolveBootstrapPlayer($cf['event_second_player'] ?? null, $cf['event_second_player_country'] ?? null, $tbd, $tour);
+                if (!$cp1 || !$cp2 || $cp1->id === $tbd->id || $cp2->id === $tbd->id) continue;
+
+                // The still-pending slot that holds exactly these two players.
+                $slot = $tournament->matches()
+                    ->where('round', $round)
+                    ->whereNotIn('status', ['finished', 'bye'])
+                    ->where(function ($q) use ($cp1, $cp2) {
+                        $q->where(fn ($a) => $a->where('player1_id', $cp1->id)->where('player2_id', $cp2->id))
+                          ->orWhere(fn ($b) => $b->where('player1_id', $cp2->id)->where('player2_id', $cp1->id));
+                    })
+                    ->first();
+                if (!$slot) continue;
+
+                foreach ($finished as $ff) {
+                    $fp1 = $this->resolveBootstrapPlayer($ff['event_first_player'] ?? null, $ff['event_first_player_country'] ?? null, $tbd, $tour);
+                    $fp2 = $this->resolveBootstrapPlayer($ff['event_second_player'] ?? null, $ff['event_second_player_country'] ?? null, $tbd, $tour);
+                    if (!$fp1 || !$fp2) continue;
+
+                    $ffIds = [$fp1->id, $fp2->id];
+                    $cp1In = in_array($cp1->id, $ffIds, true);
+                    $cp2In = in_array($cp2->id, $ffIds, true);
+                    // Must share EXACTLY ONE of the cancelled pair (the survivor).
+                    if ($cp1In === $cp2In) continue;
+
+                    $survivor    = $cp1In ? $cp1 : $cp2;
+                    $withdrawn   = $cp1In ? $cp2 : $cp1;
+                    $replacement = ($fp1->id === $survivor->id) ? $fp2 : $fp1;
+
+                    // Replacement must be a different, real person.
+                    if (!$replacement || $replacement->id === $survivor->id
+                        || $replacement->id === $withdrawn->id
+                        || in_array($replacement->id, $placeholderIds, true)) {
+                        continue;
+                    }
+
+                    // Winner (from the finished fixture) mapped to a real slot player.
+                    $winnerId = null;
+                    if (($ff['event_winner'] ?? null) === 'First Player')  $winnerId = $fp1->id;
+                    elseif (($ff['event_winner'] ?? null) === 'Second Player') $winnerId = $fp2->id;
+                    if (!in_array($winnerId, [$survivor->id, $replacement->id], true)) $winnerId = null;
+
+                    // Put the replacement in the withdrawn player's side (badge LL).
+                    $updates = ['status' => 'finished'];
+                    if ($slot->player1_id === $withdrawn->id) {
+                        $updates['player1_id'] = $replacement->id;
+                        $updates['player1_seed'] = 'LL';
+                    } else {
+                        $updates['player2_id'] = $replacement->id;
+                        $updates['player2_seed'] = 'LL';
+                    }
+                    if ($winnerId)  $updates['winner_id'] = $winnerId;
+                    $updates['score'] = $this->formatScore($ff);
+                    $updates['status_note'] = $this->computeStatusNote($ff, $ff['event_winner'] ?? null);
+                    if (!empty($ff['event_key'])) $updates['api_event_key'] = (string) $ff['event_key'];
+
+                    $slot->update($updates);
+                    $healed++;
+                    Log::info('healCancelledReplacements: swapped lucky loser', [
+                        'tournament' => $tournament->id, 'round' => $round, 'position' => $slot->bracket_position,
+                        'withdrawn' => $withdrawn->name, 'replacement' => $replacement->name, 'winner_id' => $winnerId,
+                    ]);
+                    break; // this slot is healed
+                }
+            }
+        }
+
+        return $healed;
+    }
+
     private function propagateWinners(Tournament $tournament): void
     {
         $tbdId = Player::where('name', 'TBD')->value('id');

@@ -13,7 +13,13 @@
       "PowerShell(php -l app\\\\Http\\\\Controllers\\\\Auth\\\\RegisteredUserController.php)",
       "PowerShell(php -l app\\\\Mail\\\\TournamentClosedMail.php)",
       "Bash(cat > *)",
-      "PowerShell(cd c:\\\\xampp\\\\htdocs\\\\tennisapp; php artisan tinker --execute=\"\\\\$t = App\\\\Models\\\\Tournament::where\\('name','Wimbledon'\\)->where\\('slug','like','%wta%'\\)->first\\(\\); if\\(!\\\\$t\\){ \\\\$t = App\\\\Models\\\\Tournament::where\\('name','Wimbledon'\\)->get\\(\\); echo json_encode\\(App\\\\Models\\\\Tournament::where\\('name','like','%Wimbledon%'\\)->get\\(['id','name','slug','type','api_tournament_key','tennisexplorer_slug']\\)\\); } else { echo 'FOUND '.\\\\$t->id.' '.\\\\$t->slug; }\")"
+      "PowerShell(cd c:\\\\xampp\\\\htdocs\\\\tennisapp; php artisan tinker --execute=\"\\\\$t = App\\\\Models\\\\Tournament::where\\('name','Wimbledon'\\)->where\\('slug','like','%wta%'\\)->first\\(\\); if\\(!\\\\$t\\){ \\\\$t = App\\\\Models\\\\Tournament::where\\('name','Wimbledon'\\)->get\\(\\); echo json_encode\\(App\\\\Models\\\\Tournament::where\\('name','like','%Wimbledon%'\\)->get\\(['id','name','slug','type','api_tournament_key','tennisexplorer_slug']\\)\\); } else { echo 'FOUND '.\\\\$t->id.' '.\\\\$t->slug; }\")",
+      "Bash(grep -v \"ftp\\\\|^Warning\\\\|^$\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(grep -oE \"^\\\\\\(\\([0-9]+\\),\\(6[1-9]|7[0-9]\\),[0-9]+,\" /c/Users/elbub/Downloads/u864862219_tennisapp.20260630220129.sql/u864862219_tennisapp.sql 2>/dev/null | sed -E 's/^\\\\\\([0-9]+,\\([0-9]+\\),.*/\\\\1/' | sort | uniq -c || echo \"path not found, will grep differently\")",
+      "Read(//c/Users/elbub/Downloads/u864862219_tennisapp.20260630220129.sql/**)"
     ],
     "additionalDirectories": [
       "C:\\Users\\elbub\\AppData\\Local\\Temp\\claude\\c--xampp-htdocs-tennisapp\\8445dadb-541e-4fde-a3f0-d74184de6ff3\\scratchpad"
