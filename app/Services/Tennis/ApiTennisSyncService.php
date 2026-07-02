@@ -1026,8 +1026,16 @@ class ApiTennisSyncService
                 ->first();
             if (!$existing) continue; // placeholder row must already exist
 
-            // RESULT LOCK — never rewrite a played/bye match.
-            if (in_array($existing->status, ['finished', 'bye'], true)) {
+            // RESULT LOCK — never rewrite a played/bye match. EXCEPTION: a slot
+            // with the SAME player on both sides (player1_id === player2_id) is
+            // provably corrupt — nobody plays themselves — so we let the heal
+            // below restore the correct opponent from bracket.tennis even though
+            // the row is (bogusly) marked finished. This is what un-doubles a
+            // "M. Keys vs M. Keys" card left behind when a duplicate player row
+            // gets merged into the keyed one after both landed in one slot.
+            $isSelfMatch = $existing->player1_id !== null
+                && $existing->player1_id === $existing->player2_id;
+            if (!$isSelfMatch && in_array($existing->status, ['finished', 'bye'], true)) {
                 $report['skipped_locked']++;
                 continue;
             }
@@ -1038,6 +1046,7 @@ class ApiTennisSyncService
 
             // Heal each side using the round-0 bootstrap rules.
             $updates = [];
+            $selfMatchBlanked = false;
             $sides = [
                 ['side' => 'player1', 'player' => $p1, 'name' => $entry['p1'], 'seed' => $entry['p1_seed'] ?? null],
                 ['side' => 'player2', 'player' => $p2, 'name' => $entry['p2'], 'seed' => $entry['p2_seed'] ?? null],
@@ -1055,7 +1064,25 @@ class ApiTennisSyncService
                 if (($curIsPlaceholder || $wrongSibling || $diffPerson) && $incomingIsReal) {
                     $updates[$idCol]   = $s['player']->id;
                     $updates[$seedCol] = $s['seed'];
+                } elseif ($isSelfMatch && !$incomingIsReal && ($diffPerson || $wrongSibling)) {
+                    // Self-match slot where bracket.tennis has NO real opponent
+                    // for this side yet (it still shows TBD): collapse the
+                    // duplicated player back to the TBD placeholder so the card
+                    // reads "Player vs TBD" until the opponent's feeder resolves,
+                    // instead of "Player vs Player". Keeps the side BT DOES name.
+                    $updates[$idCol]   = $s['player']->id; // the TBD placeholder
+                    $updates[$seedCol] = null;
+                    $selfMatchBlanked  = true;
                 }
+            }
+
+            // A player-vs-themselves slot carries no real result. Once we blank
+            // the duplicate side to TBD, reset the bogus status/winner/score so
+            // the correct opponent and score can land when the feeder resolves.
+            if ($selfMatchBlanked) {
+                $updates['status']    = 'pending';
+                $updates['winner_id'] = null;
+                $updates['score']     = null;
             }
 
             if (!empty($updates)) {
