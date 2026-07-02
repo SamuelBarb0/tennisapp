@@ -488,6 +488,13 @@ class ApiTennisSyncService
         // wrong bracket_position.
         $this->propagateWinners($tournament);
 
+        // Un-double any "player vs themselves" slot that fill + propagate can
+        // leave when bracket.tennis and our position topology disagree on which
+        // side a player belongs to. Rebuilds the slot from its two feeders, so
+        // it reads "Player vs TBD" until the opponent's match finishes. Runs
+        // after propagation so it gets the final word.
+        $this->repairSelfMatches($tournament);
+
         // ── LATER-ROUND RESULTS (second pass) ───────────────────────────────
         // The results loop near the top ran BEFORE the R64 / R32 / … slots held
         // their real players — those are only placed just above, by
@@ -951,6 +958,79 @@ class ApiTennisSyncService
     }
 
     /**
+     * Repair "player vs themselves" slots (player1_id === player2_id).
+     *
+     * These appear when a duplicate Player row gets merged into the keyed one
+     * AFTER both landed in the same slot — e.g. bracket.tennis fill placed
+     * "Madison Keys" on one side (its display order lists the decided player
+     * first) while propagateWinners placed the SAME player on the other side
+     * (from her real feeder, by position parity). The two sources disagree on
+     * WHICH side she belongs to, so she ends up on both.
+     *
+     * A player-vs-self is provably impossible, so we rebuild the slot from the
+     * one authority that knows the true topology: the two feeder matches. The
+     * slot at round R position P is fed by round R-1 positions 2P-1 (→ player1)
+     * and 2P (→ player2). Each side becomes that feeder's winner if it finished,
+     * else TBD — exactly what the bracket should show while an opponent's match
+     * is still being played. Any bogus result on the self-match is cleared so
+     * the real score can land once both feeders resolve.
+     *
+     * Runs AFTER propagateWinners so it has the final word each sync.
+     */
+    private function repairSelfMatches(Tournament $tournament): void
+    {
+        $tbdId = Player::where('name', 'TBD')->value('id');
+        if (!$tbdId) return;
+
+        $rounds = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
+
+        // R128 has no feeders, so start at R64.
+        for ($i = 1; $i < count($rounds); $i++) {
+            $round = $rounds[$i];
+            $prev  = $rounds[$i - 1];
+
+            $selfMatches = $tournament->matches()
+                ->where('round', $round)
+                ->whereColumn('player1_id', 'player2_id')
+                ->whereNotNull('player1_id')
+                ->where('player1_id', '!=', $tbdId) // TBD vs TBD is a normal empty slot
+                ->get();
+
+            foreach ($selfMatches as $m) {
+                $P = $m->bracket_position;
+
+                $winnerOf = function (int $pos) use ($tournament, $prev, $tbdId) {
+                    $f = $tournament->matches()
+                        ->where('round', $prev)
+                        ->where('bracket_position', $pos)
+                        ->first();
+                    return ($f && in_array($f->status, ['finished', 'bye'], true) && $f->winner_id)
+                        ? $f->winner_id
+                        : $tbdId;
+                };
+
+                $p1 = $winnerOf(2 * $P - 1);
+                $p2 = $winnerOf(2 * $P);
+                // If both feeders still resolve to the same person, something is
+                // wrong upstream — keep one side, TBD the other. Never self-match.
+                if ($p1 === $p2 && $p1 !== $tbdId) $p2 = $tbdId;
+
+                $upd = ['player1_id' => $p1, 'player2_id' => $p2];
+                if ($p1 === $tbdId) $upd['player1_seed'] = null;
+                if ($p2 === $tbdId) $upd['player2_seed'] = null;
+                // A self-match cannot have been played — clear any bogus result
+                // so the real score/winner can land once the opponent is known.
+                if (in_array($m->status, ['finished', 'bye'], true)) {
+                    $upd['status']    = 'pending';
+                    $upd['winner_id'] = null;
+                    $upd['score']     = null;
+                }
+                $m->update($upd);
+            }
+        }
+    }
+
+    /**
      * Fill later-round slots (R64, R32, …) DIRECTLY from bracket.tennis.
      *
      * Why: our scraper historically read only bracket.tennis's first round;
@@ -1026,16 +1106,8 @@ class ApiTennisSyncService
                 ->first();
             if (!$existing) continue; // placeholder row must already exist
 
-            // RESULT LOCK — never rewrite a played/bye match. EXCEPTION: a slot
-            // with the SAME player on both sides (player1_id === player2_id) is
-            // provably corrupt — nobody plays themselves — so we let the heal
-            // below restore the correct opponent from bracket.tennis even though
-            // the row is (bogusly) marked finished. This is what un-doubles a
-            // "M. Keys vs M. Keys" card left behind when a duplicate player row
-            // gets merged into the keyed one after both landed in one slot.
-            $isSelfMatch = $existing->player1_id !== null
-                && $existing->player1_id === $existing->player2_id;
-            if (!$isSelfMatch && in_array($existing->status, ['finished', 'bye'], true)) {
+            // RESULT LOCK — never rewrite a played/bye match.
+            if (in_array($existing->status, ['finished', 'bye'], true)) {
                 $report['skipped_locked']++;
                 continue;
             }
@@ -1046,7 +1118,6 @@ class ApiTennisSyncService
 
             // Heal each side using the round-0 bootstrap rules.
             $updates = [];
-            $selfMatchBlanked = false;
             $sides = [
                 ['side' => 'player1', 'player' => $p1, 'name' => $entry['p1'], 'seed' => $entry['p1_seed'] ?? null],
                 ['side' => 'player2', 'player' => $p2, 'name' => $entry['p2'], 'seed' => $entry['p2_seed'] ?? null],
@@ -1064,25 +1135,7 @@ class ApiTennisSyncService
                 if (($curIsPlaceholder || $wrongSibling || $diffPerson) && $incomingIsReal) {
                     $updates[$idCol]   = $s['player']->id;
                     $updates[$seedCol] = $s['seed'];
-                } elseif ($isSelfMatch && !$incomingIsReal && ($diffPerson || $wrongSibling)) {
-                    // Self-match slot where bracket.tennis has NO real opponent
-                    // for this side yet (it still shows TBD): collapse the
-                    // duplicated player back to the TBD placeholder so the card
-                    // reads "Player vs TBD" until the opponent's feeder resolves,
-                    // instead of "Player vs Player". Keeps the side BT DOES name.
-                    $updates[$idCol]   = $s['player']->id; // the TBD placeholder
-                    $updates[$seedCol] = null;
-                    $selfMatchBlanked  = true;
                 }
-            }
-
-            // A player-vs-themselves slot carries no real result. Once we blank
-            // the duplicate side to TBD, reset the bogus status/winner/score so
-            // the correct opponent and score can land when the feeder resolves.
-            if ($selfMatchBlanked) {
-                $updates['status']    = 'pending';
-                $updates['winner_id'] = null;
-                $updates['score']     = null;
             }
 
             if (!empty($updates)) {
