@@ -298,8 +298,19 @@ class BracketTennisScraper
         $name = preg_replace('/^[a-z]\.\s*/i', '', trim($name)); // drop "J. "
         $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $name) ?: $name;
         $ascii = preg_replace('/[^a-z\s-]/i', '', $ascii);
-        // Last whitespace-separated chunk is the surname
+        // Treat hyphens as spaces so a compound surname written with a hyphen by
+        // one source ("Carreno-Busta", "Auger-Aliassime" from api-tennis) reduces
+        // to the same last-token key as the spaced form bracket.tennis uses
+        // ("Pablo Carreno Busta", "Felix Auger Aliassime"). Without this the two
+        // rows never link and the player's later-round results never land.
+        $ascii = str_replace('-', ' ', $ascii);
         $tokens = preg_split('/\s+/', strtolower(trim($ascii)));
+        // Drop generational suffixes so "Damm Jr" keys on "damm" (matching the
+        // bare "Damm" api-tennis reports), not the meaningless "jr".
+        while (count($tokens) > 1 && in_array(end($tokens), ['jr', 'sr', 'ii', 'iii', 'iv'], true)) {
+            array_pop($tokens);
+        }
+        // Last whitespace-separated chunk is the surname
         return end($tokens) ?: '';
     }
 }

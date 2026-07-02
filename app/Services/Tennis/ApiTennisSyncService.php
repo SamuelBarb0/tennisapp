@@ -398,145 +398,12 @@ class ApiTennisSyncService
         $updated = 0;
         $skippedQualy = 0;
         foreach ($resp['result'] as $f) {
-            $eventKey = $f['event_key'] ?? null;
-            if (!$eventKey) continue;
-
-            // Skip qualifying rounds — the bracket predictions cover the main
-            // draw only. The API marks them with event_qualification = "True"
-            // and reuses round names like "Semi-finals" / "Final" for the
-            // qualifying ladder, which would corrupt our bracket structure.
-            $isQualy = ($f['event_qualification'] ?? null) === 'True'
-                || ($f['event_qualification'] ?? null) === true;
-            if ($isQualy) {
+            $outcome = $this->applyFixtureResult($f, $tournament, $newlyFinished);
+            if ($outcome === 'updated') {
+                $updated++;
+            } elseif ($outcome === 'skipped') {
                 $skippedQualy++;
-                continue;
             }
-
-            // Skip fixtures with no round label — those are usually exhibition
-            // / next-gen / extras the API mixes into the tournament feed.
-            $roundLabel = trim((string) ($f['tournament_round'] ?? ''));
-            if ($roundLabel === '') {
-                $skippedQualy++;
-                continue;
-            }
-
-            // Cancelled fixtures: api-tennis emits these when a player
-            // withdraws before the match and adds a NEW fixture with the
-            // replacement opponent. We still want to mark the original DB
-            // row as cancelled so the UI shows it correctly — but the
-            // structural changes (new opponent) come via bracket.tennis +
-            // the replacement fixture, NOT this cancelled one.
-            $apiStatus = mb_strtolower((string) ($f['event_status'] ?? ''));
-            if (str_contains($apiStatus, 'cancelled')) {
-                $cancelledMatch = TennisMatch::where('api_event_key', (string) $eventKey)->first();
-                if ($cancelledMatch && $cancelledMatch->status !== 'cancelled') {
-                    $cancelledMatch->update(['status' => 'cancelled']);
-                }
-                $skippedQualy++;
-                continue;
-            }
-
-            // Resolve the two players the fixture refers to. We do NOT create
-            // new Player rows here for unknown players — if api-tennis names
-            // someone bracket.tennis never placed, that fixture simply won't
-            // match any slot and is skipped. (upsertPlayerFromFixture is still
-            // used because it resolves an EXISTING player by api_player_key,
-            // which is how we compare against the slot's current occupants.)
-            $player1 = $this->upsertPlayerFromFixture(
-                $f['first_player_key'] ?? null,
-                $f['event_first_player'] ?? null,
-                $f['event_first_player_logo'] ?? null,
-                $tournament,
-            );
-            $player2 = $this->upsertPlayerFromFixture(
-                $f['second_player_key'] ?? null,
-                $f['event_second_player'] ?? null,
-                $f['event_second_player_logo'] ?? null,
-                $tournament,
-            );
-
-            $status = $this->mapStatus($f['event_status'] ?? null);
-            $winnerSide = $f['event_winner'] ?? null;
-            $round = $this->mapRound($f['tournament_round'] ?? '');
-
-            // Compute status note for retirements / walkovers / suspensions.
-            // The LOSING player gets the tag (ret./wo/etc.) next to their name.
-            $statusNote = $this->computeStatusNote($f, $winnerSide);
-
-            // ── SLOT LOOKUP — strict, no fuzzy matching, no creation ─────────
-            // 1) Exact match by api_event_key (a fixture we've already synced).
-            // 2) Otherwise, the UNIQUE bracket.tennis slot in this round whose
-            //    TWO players are exactly this fixture's two players (in either
-            //    order). Both must match — that's what makes it unambiguous and
-            //    impossible to drop a qualy player into the wrong slot.
-            // If neither identifies a slot, we SKIP. api-tennis never creates a
-            // slot or plants a player.
-            $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first();
-
-            if (!$existing && $player1 && $player2) {
-                $existing = TennisMatch::where('tournament_id', $tournament->id)
-                    ->where('round', $round)
-                    ->where(function ($q) use ($player1, $player2) {
-                        $q->where(function ($a) use ($player1, $player2) {
-                            $a->where('player1_id', $player1->id)
-                              ->where('player2_id', $player2->id);
-                        })->orWhere(function ($b) use ($player1, $player2) {
-                            $b->where('player1_id', $player2->id)
-                              ->where('player2_id', $player1->id);
-                        });
-                    })
-                    ->first();
-            }
-
-            if (!$existing) {
-                // No unambiguous slot — do not invent one.
-                $skippedQualy++; // reuse counter to avoid adding a return key
-                continue;
-            }
-
-            // ── WINNER — must be one of the two players ALREADY in the slot ──
-            // We pick the winner by the side api-tennis reports, but map it to
-            // the slot's own player_id (never the fixture's), so even if
-            // api-tennis hands back a slightly different Player row for the
-            // same person, the winner stored is always a player physically in
-            // this slot. If the reported winner isn't one of the slot's two
-            // players, we leave winner_id untouched.
-            $winnerId = $existing->winner_id;
-            if ($status === 'finished') {
-                if ($winnerSide === 'First Player' && $player1
-                    && in_array($player1->id, [$existing->player1_id, $existing->player2_id], true)) {
-                    $winnerId = $player1->id;
-                } elseif ($winnerSide === 'Second Player' && $player2
-                    && in_array($player2->id, [$existing->player1_id, $existing->player2_id], true)) {
-                    $winnerId = $player2->id;
-                }
-            }
-
-            // ── RESULTS-ONLY UPDATE ─────────────────────────────────────────
-            // Score, note, schedule, status, winner. NEVER players, seeds,
-            // round, or bracket_position.
-            $wasFinished = $existing->status === 'finished';
-            $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
-                || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
-
-            $updateAttrs = [
-                'status'       => $status,
-                'status_note'  => $statusNote,
-                'winner_id'    => $winnerId,
-                'score'        => $this->formatScore($f),
-                'scheduled_at' => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null, $tournament->timezone ?: 'America/Bogota'),
-            ];
-
-            // Adopt the real api_event_key when this is the first time a fixture
-            // lands on a bootstrap/placeholder slot, so future syncs match by
-            // event_key directly. This changes only the key, not the structure.
-            if ($isPlaceholder) {
-                $updateAttrs['api_event_key'] = (string) $eventKey;
-            }
-
-            $existing->update($updateAttrs);
-            if (!$wasFinished && $status === 'finished') $newlyFinished[] = $existing->id;
-            $updated++;
         }
 
         // Heal lucky-loser / late-replacement slots that bracket.tennis hasn't
@@ -621,6 +488,30 @@ class ApiTennisSyncService
         // wrong bracket_position.
         $this->propagateWinners($tournament);
 
+        // ── LATER-ROUND RESULTS (second pass) ───────────────────────────────
+        // The results loop near the top ran BEFORE the R64 / R32 / … slots held
+        // their real players — those are only placed just above, by
+        // fillLaterRoundsFromBracketTennis + propagateWinners. So on that first
+        // pass every fixture past R128 was skipped as "no slot" and its score
+        // never landed (bracket.tennis-advanced matches showed "finished" with
+        // no scoreline; live later-round matches showed nothing).
+        //
+        // Now that the slots are populated, re-link their freshly-placed players
+        // to their api_player_key (so the strict both-players slot lookup can
+        // match) and re-apply results. This lands the scores, winners, retirement
+        // notes and LIVE scores for every round. applyFixtureResult is
+        // results-only — it never touches structure — so re-running it is safe
+        // and idempotent for the R128 rows it already wrote.
+        $this->linkSlotPlayerKeys($resp['result'], $tournament, false);
+        $lateFinished = [];
+        foreach ($resp['result'] as $f) {
+            $this->applyFixtureResult($f, $tournament, $lateFinished);
+        }
+        if (!empty($lateFinished)) {
+            $newlyFinished = array_merge($newlyFinished, $lateFinished);
+            $scored = BracketPredictionController::scoreTournament($tournament);
+        }
+
         // Backfill start/end dates from the main-draw fixtures, since the
         // tournament catalog endpoint doesn't expose dates. Status follows
         // start/end relative to today. We only consider REAL matches (not the
@@ -687,6 +578,163 @@ class ApiTennisSyncService
             'scored'      => $scored,
             'placeholders'=> $placeholders,
         ];
+    }
+
+    /**
+     * Apply ONE api-tennis fixture's result to the bracket.tennis-owned slot it
+     * belongs to. Results-only — never creates a slot, moves a player, changes
+     * round/position, or picks a winner who isn't already one of the slot's two
+     * players. Extracted from syncTournamentLive so it can run twice: once for
+     * round 0 (whose slots exist early) and again after the later rounds are
+     * populated (fill + propagate), so their scores / winners / live status land
+     * too — the first pass runs before those slots have real players and so skips
+     * every fixture past R128 as "no slot".
+     *
+     * Returns 'updated' (a slot was written), 'skipped' (qualy / no round label /
+     * cancelled / no unambiguous slot — counts against skippedQualy), or 'noop'
+     * (the fixture carried no event_key).
+     */
+    private function applyFixtureResult(array $f, Tournament $tournament, array &$newlyFinished): string
+    {
+        $eventKey = $f['event_key'] ?? null;
+        if (!$eventKey) return 'noop';
+
+        // Skip qualifying rounds — the bracket predictions cover the main
+        // draw only. The API marks them with event_qualification = "True"
+        // and reuses round names like "Semi-finals" / "Final" for the
+        // qualifying ladder, which would corrupt our bracket structure.
+        $isQualy = ($f['event_qualification'] ?? null) === 'True'
+            || ($f['event_qualification'] ?? null) === true;
+        if ($isQualy) return 'skipped';
+
+        // Skip fixtures with no round label — those are usually exhibition
+        // / next-gen / extras the API mixes into the tournament feed.
+        $roundLabel = trim((string) ($f['tournament_round'] ?? ''));
+        if ($roundLabel === '') return 'skipped';
+
+        // Cancelled fixtures: api-tennis emits these when a player
+        // withdraws before the match and adds a NEW fixture with the
+        // replacement opponent. We still want to mark the original DB
+        // row as cancelled so the UI shows it correctly — but the
+        // structural changes (new opponent) come via bracket.tennis +
+        // the replacement fixture, NOT this cancelled one.
+        $apiStatus = mb_strtolower((string) ($f['event_status'] ?? ''));
+        if (str_contains($apiStatus, 'cancelled')) {
+            $cancelledMatch = TennisMatch::where('api_event_key', (string) $eventKey)->first();
+            if ($cancelledMatch && $cancelledMatch->status !== 'cancelled') {
+                $cancelledMatch->update(['status' => 'cancelled']);
+            }
+            return 'skipped';
+        }
+
+        // Resolve the two players the fixture refers to. We do NOT create
+        // new Player rows here for unknown players — if api-tennis names
+        // someone bracket.tennis never placed, that fixture simply won't
+        // match any slot and is skipped. (upsertPlayerFromFixture is still
+        // used because it resolves an EXISTING player by api_player_key,
+        // which is how we compare against the slot's current occupants.)
+        $player1 = $this->upsertPlayerFromFixture(
+            $f['first_player_key'] ?? null,
+            $f['event_first_player'] ?? null,
+            $f['event_first_player_logo'] ?? null,
+            $tournament,
+        );
+        $player2 = $this->upsertPlayerFromFixture(
+            $f['second_player_key'] ?? null,
+            $f['event_second_player'] ?? null,
+            $f['event_second_player_logo'] ?? null,
+            $tournament,
+        );
+
+        $status = $this->mapStatus($f['event_status'] ?? null);
+        $winnerSide = $f['event_winner'] ?? null;
+        $round = $this->mapRound($f['tournament_round'] ?? '');
+
+        // Compute status note for retirements / walkovers / suspensions.
+        // The LOSING player gets the tag (ret./wo/etc.) next to their name.
+        $statusNote = $this->computeStatusNote($f, $winnerSide);
+
+        // ── SLOT LOOKUP — strict, no fuzzy matching, no creation ─────────
+        // 1) Exact match by api_event_key (a fixture we've already synced).
+        // 2) Otherwise, the UNIQUE bracket.tennis slot in this round whose
+        //    TWO players are exactly this fixture's two players (in either
+        //    order). Both must match — that's what makes it unambiguous and
+        //    impossible to drop a qualy player into the wrong slot.
+        // If neither identifies a slot, we SKIP. api-tennis never creates a
+        // slot or plants a player.
+        $existing = TennisMatch::where('api_event_key', (string) $eventKey)->first();
+
+        if (!$existing && $player1 && $player2) {
+            $existing = TennisMatch::where('tournament_id', $tournament->id)
+                ->where('round', $round)
+                ->where(function ($q) use ($player1, $player2) {
+                    $q->where(function ($a) use ($player1, $player2) {
+                        $a->where('player1_id', $player1->id)
+                          ->where('player2_id', $player2->id);
+                    })->orWhere(function ($b) use ($player1, $player2) {
+                        $b->where('player1_id', $player2->id)
+                          ->where('player2_id', $player1->id);
+                    });
+                })
+                ->first();
+        }
+
+        if (!$existing) {
+            // No unambiguous slot — do not invent one.
+            return 'skipped';
+        }
+
+        // Never downgrade a slot that already carries a result (finished / bye —
+        // e.g. bracket.tennis advanced the winner before api-tennis published
+        // the fixture) back to pending just because api-tennis hasn't started
+        // that fixture yet. Live / finished api results still flow through.
+        if ($status === 'pending' && in_array($existing->status, ['finished', 'bye'], true)) {
+            return 'skipped';
+        }
+
+        // ── WINNER — must be one of the two players ALREADY in the slot ──
+        // We pick the winner by the side api-tennis reports, but map it to
+        // the slot's own player_id (never the fixture's), so even if
+        // api-tennis hands back a slightly different Player row for the
+        // same person, the winner stored is always a player physically in
+        // this slot. If the reported winner isn't one of the slot's two
+        // players, we leave winner_id untouched.
+        $winnerId = $existing->winner_id;
+        if ($status === 'finished') {
+            if ($winnerSide === 'First Player' && $player1
+                && in_array($player1->id, [$existing->player1_id, $existing->player2_id], true)) {
+                $winnerId = $player1->id;
+            } elseif ($winnerSide === 'Second Player' && $player2
+                && in_array($player2->id, [$existing->player1_id, $existing->player2_id], true)) {
+                $winnerId = $player2->id;
+            }
+        }
+
+        // ── RESULTS-ONLY UPDATE ─────────────────────────────────────────
+        // Score, note, schedule, status, winner. NEVER players, seeds,
+        // round, or bracket_position.
+        $wasFinished = $existing->status === 'finished';
+        $isPlaceholder = str_starts_with($existing->api_event_key ?? '', 'placeholder-')
+            || str_starts_with($existing->api_event_key ?? '', 'bt-bootstrap-');
+
+        $updateAttrs = [
+            'status'       => $status,
+            'status_note'  => $statusNote,
+            'winner_id'    => $winnerId,
+            'score'        => $this->formatScore($f),
+            'scheduled_at' => $this->parseDateTime($f['event_date'] ?? null, $f['event_time'] ?? null, $tournament->timezone ?: 'America/Bogota'),
+        ];
+
+        // Adopt the real api_event_key when this is the first time a fixture
+        // lands on a bootstrap/placeholder slot, so future syncs match by
+        // event_key directly. This changes only the key, not the structure.
+        if ($isPlaceholder) {
+            $updateAttrs['api_event_key'] = (string) $eventKey;
+        }
+
+        $existing->update($updateAttrs);
+        if (!$wasFinished && $status === 'finished') $newlyFinished[] = $existing->id;
+        return 'updated';
     }
 
     /**
