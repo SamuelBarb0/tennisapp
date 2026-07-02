@@ -34,7 +34,21 @@ class BracketTennisScraper
 
     public function draw(string $slug, string $tour): array
     {
-        return $this->fetchAndParse($slug, $tour, fn($html) => $this->parse($html));
+        return $this->fetchAndParse($slug, $tour, fn($html) => $this->parse($html, true));
+    }
+
+    /**
+     * Like draw(), but returns EVERY round's matches — each entry tagged with
+     * its 'round' index (0 = first round, 1 = next, …). bracket.tennis renders
+     * the full tree, so the later-round columns already carry the players it
+     * has propagated (e.g. Wimbledon R32 shows Sinner vs Brooksby once the R64
+     * is played). We use this to fill our R64+ slots directly from BT instead
+     * of relying solely on internal propagation of api-tennis results — which
+     * leaves those slots empty whenever a score fails to sync.
+     */
+    public function fullDraw(string $slug, string $tour): array
+    {
+        return $this->fetchAndParse($slug, $tour, fn($html) => $this->parse($html, false), cacheSuffix: 'fulldraw');
     }
 
     /**
@@ -95,7 +109,11 @@ class BracketTennisScraper
         //     so confirmations get picked up within one cron cycle instead
         //     of waiting an hour
         //   - fully resolved draw → 1h (it won't change anymore)
-        $hasPlaceholders = $cacheSuffix === 'draw' && $this->drawHasPlaceholders($parsed);
+        // For fulldraw, later-round TBDs mean the tournament is still being
+        // played → keep the short TTL so newly-propagated R32+ players are
+        // picked up within a cron cycle. Only a fully-resolved tree (no TBDs
+        // anywhere) caches for the full hour.
+        $hasPlaceholders = in_array($cacheSuffix, ['draw', 'fulldraw'], true) && $this->drawHasPlaceholders($parsed);
         $ttl = (empty($parsed) || $hasPlaceholders) ? self::TTL_DRAW_EMPTY : self::TTL_DRAW;
         $cache->put($cacheKey, $parsed, $ttl);
         return $parsed;
@@ -109,18 +127,42 @@ class BracketTennisScraper
      * We split the HTML on every `data-match-id` boundary and parse the
      * following ~3KB for the two player blocks of that match.
      */
-    private function parse(string $html): array
+    private function parse(string $html, bool $onlyRound0 = true): array
     {
         $parts = preg_split('#(data-match-id="\d+-\d+")#', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
         $matches = [];
+
+        // bracket.tennis tags every match container with a stable player UUID
+        // pair — data-player-ids="uuidA,uuidB" — in ALL rounds. But player
+        // NAMES only render with a flag SVG in the FIRST round; later rounds
+        // show the propagated player WITHOUT a flag. Since every later-round
+        // player won a first-round match, we learn each UUID's identity from
+        // round 0 and resolve later rounds by UUID. Later-round matches are
+        // stashed and resolved after the loop so DOM order doesn't matter.
+        $uuidMap  = []; // uuid => ['name'=>, 'country'=>, 'seed'=>]
+        $laterRaw = []; // [ ['round'=>, 'slot'=>, 'ids'=>[uuidA,uuidB]] ]
 
         for ($i = 1; $i < count($parts); $i += 2) {
             if (!preg_match('#(\d+)-(\d+)#', $parts[$i], $m)) continue;
             $round = (int) $m[1];
             $slot  = (int) $m[2];
-            if ($round !== 0) continue; // we only need round 0
+            if ($onlyRound0 && $round !== 0) continue;
 
             $body = substr($parts[$i + 1] ?? '', 0, 3500);
+
+            // The two side UUIDs (either may be absent → that side is TBD).
+            $ids = [];
+            if (preg_match('~data-player-ids="([^"]*)"~', $body, $pm)) {
+                foreach (explode(',', $pm[1]) as $uuid) {
+                    $ids[] = trim($uuid);
+                }
+            }
+
+            // Later rounds: no flag markup to parse — stash for UUID resolution.
+            if ($round !== 0) {
+                $laterRaw[] = ['round' => $round, 'slot' => $slot, 'ids' => $ids];
+                continue;
+            }
 
             // Each player block looks like:
             //   <use href="...#flag-XXX"></use></svg><div...>NAME...
@@ -151,7 +193,8 @@ class BracketTennisScraper
                 }
             }
 
-            $matches[] = [
+            $entry = [
+                'round'       => 0,
                 'slot'        => $slot,
                 'p1'          => $this->cleanName($players[0][2][0]),
                 'p2'          => $this->cleanName($players[1][2][0]),
@@ -160,9 +203,43 @@ class BracketTennisScraper
                 'p1_seed'     => $this->cleanSeed($seeds[0] ?? ''),
                 'p2_seed'     => $this->cleanSeed($seeds[1] ?? ''),
             ];
+            $matches[] = $entry;
+
+            // Learn UUID → identity so later rounds can resolve the same person.
+            // Skip Bye sides (no real player) and unmapped/empty UUIDs.
+            foreach ([0 => 'p1', 1 => 'p2'] as $k => $side) {
+                if (isset($ids[$k]) && $ids[$k] !== '' && strcasecmp($entry[$side], 'Bye') !== 0) {
+                    $uuidMap[$ids[$k]] = [
+                        'name'    => $entry[$side],
+                        'country' => $entry[$side . '_country'],
+                        'seed'    => $entry[$side . '_seed'],
+                    ];
+                }
+            }
         }
 
-        usort($matches, fn($a, $b) => $a['slot'] - $b['slot']);
+        // Resolve stashed later-round matches from the UUID map (round 0 fully
+        // parsed now). A side whose UUID is missing or not-yet-known (e.g. an
+        // unresolved qualifier) stays TBD; a slot with neither side known is
+        // skipped entirely.
+        foreach ($laterRaw as $lr) {
+            $p1 = (isset($lr['ids'][0]) && $lr['ids'][0] !== '') ? ($uuidMap[$lr['ids'][0]] ?? null) : null;
+            $p2 = (isset($lr['ids'][1]) && $lr['ids'][1] !== '') ? ($uuidMap[$lr['ids'][1]] ?? null) : null;
+            if (!$p1 && !$p2) continue;
+
+            $matches[] = [
+                'round'       => $lr['round'],
+                'slot'        => $lr['slot'],
+                'p1'          => $p1['name'] ?? 'TBD',
+                'p2'          => $p2['name'] ?? 'TBD',
+                'p1_country'  => $p1['country'] ?? null,
+                'p2_country'  => $p2['country'] ?? null,
+                'p1_seed'     => $p1['seed'] ?? null,
+                'p2_seed'     => $p2['seed'] ?? null,
+            ];
+        }
+
+        usort($matches, fn($a, $b) => [$a['round'], $a['slot']] <=> [$b['round'], $b['slot']]);
         return $matches;
     }
 

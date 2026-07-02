@@ -362,6 +362,18 @@ class ApiTennisSyncService
         // runs, the slot and the fixture share one player_id and results land.
         $this->dedupePlayersForFixtures($resp['result'], $tournament);
 
+        // KEY LINK (identity only). The dedupe above merges a BT duplicate ONLY
+        // when the keyed canonical row already exists; on the first sync of a
+        // draw that keyed row usually doesn't exist yet, so the key-less slot
+        // player is left unlinked and its result never lands. This pass closes
+        // that gap: for every key-less player sitting in THIS draw's slots, it
+        // links the api_player_key from the tournament's own fixtures (1:1,
+        // surname + first-name-prefix compatible, draw-scoped), either merging
+        // into an existing keyed row or stamping the key onto the slot row.
+        // Structure is never touched — see linkSlotPlayerKeys() for the safety
+        // argument. Runs live here; dry-run is used by the diff harness.
+        $this->linkSlotPlayerKeys($resp['result'], $tournament, false);
+
         // ════════════════════════════════════════════════════════════════════
         //  RESULTS-ONLY SYNC — api-tennis is NOT allowed to touch structure.
         // ════════════════════════════════════════════════════════════════════
@@ -588,6 +600,15 @@ class ApiTennisSyncService
         // complete (Quarter-finals / Semis / Final) even before the API
         // publishes those fixtures.
         $placeholders = $this->ensureBracketPlaceholders($tournament);
+
+        // Fill later rounds DIRECTLY from bracket.tennis (R64, R32, …). BT
+        // publishes those rounds with the advancing players; taking them as
+        // authoritative — its role for round 0 — makes the bracket resilient to
+        // api-tennis result gaps instead of depending solely on propagation
+        // below. Runs after placeholders (so the slots exist) and before
+        // propagation (so BT wins; propagation only fills whatever BT lacks).
+        // Result-locked and never structural — see the method's safety notes.
+        $this->fillLaterRoundsFromBracketTennis($tournament, false);
 
         // Propagate winners structurally: every finished match at round R,
         // position P feeds the match at round R+1, position ceil(P/2).
@@ -879,6 +900,153 @@ class ApiTennisSyncService
                 }
             }
         }
+    }
+
+    /**
+     * Fill later-round slots (R64, R32, …) DIRECTLY from bracket.tennis.
+     *
+     * Why: our scraper historically read only bracket.tennis's first round;
+     * every later round was rebuilt by propagating api-tennis results forward
+     * (propagateWinners). So whenever an api-tennis result failed to sync, the
+     * downstream slot stayed empty — the Wimbledon "R32 shows on bracket.tennis
+     * but not in our bracket" complaint. bracket.tennis already publishes those
+     * later rounds with the advancing players, so we take them as authoritative
+     * (its exact role for round 0), independent of api-tennis reliability.
+     *
+     * Safety — this can NOT corrupt the bracket:
+     *   - It only fills slots that already exist (created by
+     *     ensureBracketPlaceholders); it never adds or reorders slots.
+     *   - A finished / bye result is NEVER overwritten (result-lock).
+     *   - Players are healed with the SAME rules as the round-0 bootstrap:
+     *     replace only a placeholder / wrong-sibling / genuinely-different
+     *     person, and never write a placeholder over a real player.
+     *   - The upstream-winner step only resolves a PENDING feeder match, only
+     *     when exactly one feeder holds the advancing player, and never
+     *     overwrites an existing winner or a locked result.
+     *
+     * dryRun=true performs no writes and returns the proposed actions.
+     */
+    private function fillLaterRoundsFromBracketTennis(Tournament $tournament, bool $dryRun = false): array
+    {
+        $report = ['filled' => 0, 'winners_set' => 0, 'skipped_locked' => 0, 'actions' => []];
+        if (!$tournament->tennisexplorer_slug) return $report;
+
+        [$btSlug, $btTour] = $this->parseBracketTennisSlug($tournament->tennisexplorer_slug, $tournament);
+        $full = $this->scraper->fullDraw($btSlug, $btTour);
+        if (empty($full)) return $report;
+
+        // Derive the start round from the round-0 match count — same rule the
+        // bootstrap uses — so BT round index r maps to the right named round
+        // (56-draw: r0→R64, r1→R32, …; 128-draw: r0→R128, r2→R32, …).
+        $r0 = 0;
+        foreach ($full as $e) {
+            if (($e['round'] ?? 0) === 0) $r0++;
+        }
+        $startRound = match (true) {
+            $r0 > 32 => 'R128',
+            $r0 > 16 => 'R64',
+            $r0 > 8  => 'R32',
+            $r0 > 4  => 'R16',
+            default  => 'QF',
+        };
+        $canonical = ['R128', 'R64', 'R32', 'R16', 'QF', 'SF', 'F'];
+        $startIdx = array_search($startRound, $canonical, true);
+        if ($startIdx === false) return $report;
+
+        $tbd = Player::where('name', 'TBD')->first();
+        if (!$tbd) return $report;
+        $placeholderIds = Player::where(function ($q) {
+            $q->where('name', 'TBD')
+              ->orWhere('name', 'like', '%Qualifier%')
+              ->orWhere('name', 'like', '%Lucky Loser%')
+              ->orWhere('name', 'like', '%Por definir%')
+              ->orWhereRaw('LOWER(name) = ?', ['ll']);
+        })->pluck('id')->all();
+        $tour = str_starts_with($tournament->type, 'WTA') ? 'WTA' : 'ATP';
+
+        foreach ($full as $entry) {
+            $btRound = $entry['round'] ?? 0;
+            if ($btRound < 1) continue; // round 0 is handled by the bootstrap
+
+            $roundName = $canonical[$startIdx + $btRound] ?? null;
+            if (!$roundName) continue;
+            $position = $entry['slot'] + 1; // 1-indexed, matches bracket_position
+
+            $existing = $tournament->matches()
+                ->where('round', $roundName)
+                ->where('bracket_position', $position)
+                ->first();
+            if (!$existing) continue; // placeholder row must already exist
+
+            // RESULT LOCK — never rewrite a played/bye match.
+            if (in_array($existing->status, ['finished', 'bye'], true)) {
+                $report['skipped_locked']++;
+                continue;
+            }
+
+            $p1 = $this->resolveBootstrapPlayer($entry['p1'], $entry['p1_country'] ?? null, $tbd, $tour);
+            $p2 = $this->resolveBootstrapPlayer($entry['p2'], $entry['p2_country'] ?? null, $tbd, $tour);
+            if (!$p1 || !$p2) continue;
+
+            // Heal each side using the round-0 bootstrap rules.
+            $updates = [];
+            $sides = [
+                ['side' => 'player1', 'player' => $p1, 'name' => $entry['p1'], 'seed' => $entry['p1_seed'] ?? null],
+                ['side' => 'player2', 'player' => $p2, 'name' => $entry['p2'], 'seed' => $entry['p2_seed'] ?? null],
+            ];
+            foreach ($sides as $s) {
+                $idCol   = $s['side'] . '_id';
+                $seedCol = $s['side'] . '_seed';
+                $curId   = $existing->{$idCol};
+                $curIsPlaceholder = in_array($curId, $placeholderIds, true);
+                $curPlayer = $existing->{$s['side']};
+                $wrongSibling = !$curIsPlaceholder && $curPlayer && $this->isWrongSiblingFor($curPlayer, $s['name']);
+                $diffPerson   = !$curIsPlaceholder && !$wrongSibling && $curPlayer && $this->isDifferentPersonFrom($curPlayer, $s['name']);
+                $incomingIsReal = !in_array($s['player']->id, $placeholderIds, true);
+
+                if (($curIsPlaceholder || $wrongSibling || $diffPerson) && $incomingIsReal) {
+                    $updates[$idCol]   = $s['player']->id;
+                    $updates[$seedCol] = $s['seed'];
+                }
+            }
+
+            if (!empty($updates)) {
+                $report['actions'][] = [
+                    'type' => 'fill', 'round' => $roundName, 'position' => $position,
+                    'p1' => $entry['p1'], 'p2' => $entry['p2'],
+                ];
+                if (!$dryRun) $existing->update($updates);
+                $report['filled']++;
+            }
+
+            // Upstream winner: a real player in this slot won their feeder match
+            // in the previous round. Resolve that PENDING feeder so results stay
+            // consistent for propagation + prediction scoring even when
+            // api-tennis never delivered the score.
+            $prevRound = $canonical[$startIdx + $btRound - 1] ?? null;
+            if ($prevRound) {
+                foreach ([$p1, $p2] as $adv) {
+                    if (!$adv || in_array($adv->id, $placeholderIds, true)) continue;
+                    $feeders = $tournament->matches()
+                        ->where('round', $prevRound)
+                        ->whereIn('bracket_position', [2 * $position - 1, 2 * $position])
+                        ->get()
+                        ->filter(fn($fm) => in_array($adv->id, [$fm->player1_id, $fm->player2_id], true));
+                    if ($feeders->count() !== 1) continue; // ambiguous / not placed
+                    $feeder = $feeders->first();
+                    if (in_array($feeder->status, ['finished', 'bye'], true) || $feeder->winner_id) continue;
+
+                    $report['actions'][] = [
+                        'type' => 'winner', 'round' => $prevRound,
+                        'position' => $feeder->bracket_position, 'winner' => $adv->name,
+                    ];
+                    if (!$dryRun) $feeder->update(['status' => 'finished', 'winner_id' => $adv->id]);
+                    $report['winners_set']++;
+                }
+            }
+        }
+
+        return $report;
     }
 
     /**
@@ -2001,6 +2169,165 @@ class ApiTennisSyncService
                 }
             }
         }
+    }
+
+    /**
+     * Re-point every match / prediction / seed-override FK from a duplicate
+     * player row to the canonical row, then delete the duplicate. Pure identity
+     * merge — it never moves a player to a different slot or changes who is in
+     * the bracket, so it cannot reintroduce structural corruption. Extracted so
+     * linkSlotPlayerKeys() and the fixture dedupe share one implementation.
+     */
+    private function mergePlayerInto(int $canonicalId, int $dupId): void
+    {
+        if ($canonicalId === $dupId) return;
+        \Illuminate\Support\Facades\DB::transaction(function () use ($canonicalId, $dupId) {
+            \Illuminate\Support\Facades\DB::table('matches')->where('player1_id', $dupId)->update(['player1_id' => $canonicalId]);
+            \Illuminate\Support\Facades\DB::table('matches')->where('player2_id', $dupId)->update(['player2_id' => $canonicalId]);
+            \Illuminate\Support\Facades\DB::table('matches')->where('winner_id', $dupId)->update(['winner_id' => $canonicalId]);
+            \Illuminate\Support\Facades\DB::table('bracket_predictions')->where('predicted_winner_id', $dupId)->update(['predicted_winner_id' => $canonicalId]);
+            if (\Illuminate\Support\Facades\Schema::hasTable('player_seed_overrides')) {
+                $dupOv = \Illuminate\Support\Facades\DB::table('player_seed_overrides')->where('player_id', $dupId)->get();
+                foreach ($dupOv as $ov) {
+                    $exists = \Illuminate\Support\Facades\DB::table('player_seed_overrides')
+                        ->where('player_id', $canonicalId)
+                        ->where('tournament_id', $ov->tournament_id)
+                        ->exists();
+                    if ($exists) {
+                        \Illuminate\Support\Facades\DB::table('player_seed_overrides')->where('id', $ov->id)->delete();
+                    } else {
+                        \Illuminate\Support\Facades\DB::table('player_seed_overrides')->where('id', $ov->id)->update(['player_id' => $canonicalId]);
+                    }
+                }
+            }
+            Player::where('id', $dupId)->delete();
+        });
+    }
+
+    /**
+     * Link the api_player_key onto the bracket.tennis players actually sitting
+     * in THIS tournament's slots. This is the operative fix for "some played
+     * matches never sync": the slot holds a key-less BT row ("Pablo Carreno
+     * Busta") while the api-tennis fixture carries the keyed row ("P.
+     * Carreno-Busta", key=434). Different player_id → the results loop's
+     * both-players slot match fails → the score never lands.
+     *
+     * Why this is safe (cannot corrupt the bracket):
+     *   - It only touches player IDENTITY (which Player row a key belongs to),
+     *     never a slot's occupant, seed, or position.
+     *   - Matching is scoped to the ~128 players in THIS draw and uses the SAME
+     *     surname + first-name-prefix compatibility rule as the fixture dedupe,
+     *     so siblings stay separate (Cerundolo brothers, Jones sisters).
+     *   - It acts ONLY on an unambiguous 1:1 match. Any ambiguity (0 or >1
+     *     candidate keys, or a key already held by another in-draw slot player)
+     *     is skipped — never guessed.
+     *
+     * Two outcomes per linkable slot player:
+     *   a) A keyed canonical row already exists elsewhere → merge the key-less
+     *      slot row into it (re-points the slot FK to the keyed row).
+     *   b) No keyed row exists yet (the common first-sync case the existing
+     *      dedupe skips via `if (!$canonical) continue`) → stamp the key onto
+     *      the slot row directly. No unique-constraint conflict because no other
+     *      row holds the key.
+     *
+     * dryRun=true performs NO writes and returns the proposed actions so the
+     * change can be diffed against a finished bracket before enabling it live.
+     */
+    public function linkSlotPlayerKeys(array $fixtures, Tournament $tournament, bool $dryRun = false): array
+    {
+        // 1) Build { api_player_key => api name } from this tournament's fixtures.
+        $apiByKey = [];
+        foreach ($fixtures as $f) {
+            foreach ([
+                ['k' => $f['first_player_key'] ?? null,  'n' => $f['event_first_player'] ?? null],
+                ['k' => $f['second_player_key'] ?? null, 'n' => $f['event_second_player'] ?? null],
+            ] as $side) {
+                if (!$side['k'] || !$side['n']) continue;
+                if (str_contains((string) $side['n'], '/')) continue; // doubles
+                $apiByKey[(string) $side['k']] = trim((string) $side['n']);
+            }
+        }
+        if (empty($apiByKey)) {
+            return ['linked' => 0, 'merged' => 0, 'stamped' => 0, 'skipped_ambiguous' => 0, 'actions' => []];
+        }
+
+        // 2) Players occupying this tournament's slots that have NO api key yet.
+        $slotPlayerIds = TennisMatch::where('tournament_id', $tournament->id)
+            ->get(['player1_id', 'player2_id'])
+            ->flatMap(fn($m) => [$m->player1_id, $m->player2_id])
+            ->filter()
+            ->unique()
+            ->values();
+
+        $keyless = Player::whereIn('id', $slotPlayerIds)
+            ->whereNull('api_player_key')
+            ->get();
+
+        // Keys already worn by a slot player in THIS draw are off-limits — never
+        // move a key that is already correctly placed.
+        $keysInUseInDraw = Player::whereIn('id', $slotPlayerIds)
+            ->whereNotNull('api_player_key')
+            ->pluck('api_player_key')
+            ->map(fn($k) => (string) $k)
+            ->flip();
+
+        $report = ['linked' => 0, 'merged' => 0, 'stamped' => 0, 'skipped_ambiguous' => 0, 'actions' => []];
+
+        foreach ($keyless as $p) {
+            $surname = BracketTennisScraper::surnameKey($p->name ?? '');
+            if ($surname === '') continue;
+            $prefix = $this->firstNamePrefix($p->name ?? '');
+
+            // Candidate api keys whose name is surname-equal AND first-name-prefix
+            // compatible with this slot player — the exact rule the dedupe uses.
+            $candidates = [];
+            foreach ($apiByKey as $key => $apiName) {
+                if (isset($keysInUseInDraw[$key])) continue;
+                if (BracketTennisScraper::surnameKey($apiName) !== $surname) continue;
+                $apiPrefix = $this->firstNamePrefix($apiName);
+                $compatible = $prefix === '' || $apiPrefix === ''
+                    || str_starts_with($prefix, $apiPrefix) || str_starts_with($apiPrefix, $prefix);
+                if (!$compatible) continue;
+                $candidates[$key] = $apiName;
+            }
+
+            // Conservative: act only on an unambiguous 1:1 match.
+            if (count($candidates) !== 1) {
+                if (count($candidates) > 1) {
+                    $report['skipped_ambiguous']++;
+                    $report['actions'][] = [
+                        'slot_player' => $p->name, 'slot_player_id' => $p->id,
+                        'action' => 'skip_ambiguous', 'candidates' => array_values($candidates),
+                    ];
+                }
+                continue;
+            }
+
+            $key = (string) array_key_first($candidates);
+            $apiName = $candidates[$key];
+            $existingKeyed = Player::where('api_player_key', $key)->first();
+
+            if ($existingKeyed && $existingKeyed->id !== $p->id) {
+                $report['actions'][] = [
+                    'slot_player' => $p->name, 'slot_player_id' => $p->id,
+                    'action' => 'merge_into_keyed', 'api_name' => $apiName,
+                    'api_player_key' => $key, 'canonical_id' => $existingKeyed->id,
+                ];
+                if (!$dryRun) $this->mergePlayerInto($existingKeyed->id, $p->id);
+                $report['merged']++;
+                $report['linked']++;
+            } elseif (!$existingKeyed) {
+                $report['actions'][] = [
+                    'slot_player' => $p->name, 'slot_player_id' => $p->id,
+                    'action' => 'stamp_key', 'api_name' => $apiName, 'api_player_key' => $key,
+                ];
+                if (!$dryRun) $p->update(['api_player_key' => $key]);
+                $report['stamped']++;
+                $report['linked']++;
+            }
+        }
+
+        return $report;
     }
 
     /** Loop syncTournamentLive over every active tournament with an api_tournament_key. */
