@@ -74,6 +74,12 @@ class TennisMapBracketSlugs extends Command
         'Dubai Duty Free Tennis Championships'   => ['dubai-duty-free-tennis-championships'],
         'China Open'                             => ['china-open'],
         'Wuhan Open'                             => ['wuhan-open'],
+
+        // ATP 250
+        'Gstaad'                                 => ['swiss-open-gstaad', 'gstaad'],
+        'Swiss Open Gstaad'                      => ['swiss-open-gstaad', 'gstaad'],
+        'Athens'                                 => ['athens', 'athens-open', 'vanda-pharmaceuticals-athens-open', 'hellenic-championship'],
+        'Vanda Pharmaceuticals Athens Open'      => ['athens', 'athens-open', 'vanda-pharmaceuticals-athens-open', 'hellenic-championship'],
     ];
 
     public function handle(): int
