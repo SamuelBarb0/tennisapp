@@ -67,10 +67,11 @@ class ApiTennisSyncService
         ['needle' => 'Toronto',         'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Toronto',      'country' => 'Canadá',         'surface' => 'Dura'],
         ['needle' => 'Beijing',         'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Pekín',        'country' => 'China',          'surface' => 'Dura'],
         ['needle' => 'Wuhan',           'tier' => 'WTA 1000',         'tours' => ['WTA'], 'city' => 'Wuhan',        'country' => 'China',          'surface' => 'Dura'],
-        // ATP 250 (added on request). Athens has no bracket.tennis draw until its
-        // November edition publishes — it stays an empty upcoming card until then.
+        // ATP 250 (added on request).
         ['needle' => 'Gstaad',          'tier' => 'ATP 250',          'tours' => ['ATP'], 'city' => 'Gstaad',       'country' => 'Suiza',          'surface' => 'Arcilla'],
-        ['needle' => 'Athens',          'tier' => 'ATP 250',          'tours' => ['ATP'], 'city' => 'Atenas',       'country' => 'Grecia',         'surface' => 'Dura (indoor)'],
+        // WTA 250 (added on request). Athens' bracket.tennis page is /wta (the ATP
+        // slug 404s); its draw isn't posted yet, so it fills once players appear.
+        ['needle' => 'Athens',          'tier' => 'WTA 250',          'tours' => ['WTA'], 'city' => 'Atenas',       'country' => 'Grecia',         'surface' => 'Dura'],
     ];
 
     // ───────────────────────────────────────────────────────────────────────────

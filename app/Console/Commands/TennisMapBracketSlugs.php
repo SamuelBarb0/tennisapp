@@ -78,8 +78,8 @@ class TennisMapBracketSlugs extends Command
         // ATP 250
         'Gstaad'                                 => ['swiss-open-gstaad', 'gstaad'],
         'Swiss Open Gstaad'                      => ['swiss-open-gstaad', 'gstaad'],
-        'Athens'                                 => ['athens', 'athens-open', 'vanda-pharmaceuticals-athens-open', 'hellenic-championship'],
-        'Vanda Pharmaceuticals Athens Open'      => ['athens', 'athens-open', 'vanda-pharmaceuticals-athens-open', 'hellenic-championship'],
+        'Athens'                                 => ['vanda-pharmaceuticals-athens-open', 'athens-open', 'athens', 'hellenic-championship'],
+        'Vanda Pharmaceuticals Athens Open'      => ['vanda-pharmaceuticals-athens-open', 'athens-open', 'athens', 'hellenic-championship'],
     ];
 
     public function handle(): int
